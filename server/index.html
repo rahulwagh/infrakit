@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Grep</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; color: #212529; margin: 0; padding: 2rem; }
+        h1 { text-align: center; color: #343a40; }
+        #search-box { width: 100%; max-width: 600px; margin: 2rem auto; padding: 1rem; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ced4da; }
+        #results { max-width: 800px; margin: 2rem auto; }
+        .result-item { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .result-item h3 { margin: 0 0 0.5rem 0; }
+        .result-item p { margin: 0.2rem 0; color: #6c757d; }
+        .result-item code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; }
+    </style>
+</head>
+<body>
+<h1>☁️ Cloud Grep Search</h1>
+<input type="text" id="search-box" placeholder="Search for instances, buckets, etc...">
+<div id="results"></div>
+
+<script>
+    const searchBox = document.getElementById('search-box');
+    const resultsDiv = document.getElementById('results');
+
+    // This function runs every time you type in the search box.
+    const performSearch = async () => {
+        const query = searchBox.value;
+        if (query.length < 2) {
+            resultsDiv.innerHTML = '';
+            return;
+        }
+
+        try {
+            // Call our Go API endpoint.
+            const response = await fetch(`/search?q=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                resultsDiv.innerHTML = `<p>Error: ${await response.text()}</p>`;
+                return;
+            }
+            const results = await response.json();
+
+            // Clear previous results.
+            resultsDiv.innerHTML = '';
+
+            // Display the new results.
+            if (results && results.length > 0) {
+                results.forEach(res => {
+                    const item = document.createElement('div');
+                    item.className = 'result-item';
+                    item.innerHTML = `
+                        <h3>${res.name}</h3>
+                        <p><strong>ID:</strong> <code>${res.id}</code></p>
+                        <p><strong>Service:</strong> ${res.service} | <strong>Region:</strong> ${res.region}</p>
+                    `;
+                    resultsDiv.appendChild(item);
+                });
+            } else {
+                resultsDiv.innerHTML = '<p>No results found.</p>';
+            }
+        } catch (error) {
+            resultsDiv.innerHTML = `<p>Error fetching results. Is the server running?</p>`;
+        }
+    };
+
+    // Listen for the 'keyup' event on the search box.
+    searchBox.addEventListener('keyup', performSearch);
+</script>
+</body>
+</html>

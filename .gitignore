@@ -1,0 +1,34 @@
+# Compiled executable files
+# This is the main output of your 'go build' command
+infrakit
+infrakit.exe
+
+# Go modules dependency directory
+# Not always used, but good to ignore in case you run 'go mod vendor'
+vendor/
+
+# Test and coverage reports
+*.out
+*.test
+coverage.*
+
+# IDE and editor-specific directories/files
+.idea/
+.vscode/
+*.swp
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Environment variables
+# Store local secrets in .env files but never commit them
+.env
+.env.*
+!.env.example
