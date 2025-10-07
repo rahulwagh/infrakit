@@ -12,22 +12,34 @@ import (
 var syncCmd = &cobra.Command{
 	Use:   "sync",
 	Short: "Fetch resources from cloud providers and update the local cache.",
-	Run: func(cmd *cobra.Command, args []string) {
-		log.Println("Starting resource sync...")
+	// cmd/sync.go
 
-		// Call our fetcher
-		resources, err := fetcher.FetchEC2Instances()
-		if err != nil {
-			log.Fatalf("Error fetching resources: %v", err)
-		}
+    Run: func(cmd *cobra.Command, args []string) {
+        log.Println("Starting resource sync...")
 
-		// Save the results to the cache
-		if err := cache.SaveResources(resources); err != nil {
-			log.Fatalf("Error saving cache: %v", err)
-		}
+        var allResources []fetcher.StandardizedResource
 
-		log.Println("Sync completed successfully!")
-	},
+        // Fetch EC2 Instances
+        ec2Resources, err := fetcher.FetchEC2Instances()
+        if err != nil {
+            log.Fatalf("Error fetching EC2 instances: %v", err)
+        }
+        allResources = append(allResources, ec2Resources...)
+
+        // Fetch IAM Roles
+        iamResources, err := fetcher.FetchIAMRoles()
+        if err != nil {
+            log.Fatalf("Error fetching IAM roles: %v", err)
+        }
+        allResources = append(allResources, iamResources...)
+
+        // Save the combined results to the cache
+        if err := cache.SaveResources(allResources); err != nil {
+            log.Fatalf("Error saving cache: %v", err)
+        }
+
+        log.Printf("Sync completed successfully! Found %d total resources.\n", len(allResources))
+    },
 }
 
 func init() {
