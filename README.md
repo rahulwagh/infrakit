@@ -39,6 +39,20 @@ Cloud providers offer powerful services, but their web consoles are often slow, 
 
 ## 🛠️ Installation
 
+### Install `go` if you don't have already install 
+
+#### Ubuntu
+1. Update the package manager
+```bash
+sudo apt-get update
+```
+
+2. Install Go
+```bash
+sudo apt install golang-go
+```
+
+
 ### With `go install`
 
 If you have Go installed, you can install `infrakit` with a single command:
@@ -46,9 +60,17 @@ If you have Go installed, you can install `infrakit` with a single command:
 ```bash
 go install github.com/rahulwagh/infrakit@latest
 ```
-From Binaries
 
-Download the pre-compiled binary for your operating system from the Latest Release Page
+#### Add the Go Path to your Shell's Configuration File
+Run the following command to add the Go binary path to your .bashrc file. This file runs every time you start a new terminal session.
+```bash 
+echo 'export PATH=$PATH:$HOME/go/bin' >> ~/.bashrc 
+```
+
+#### Apply the Changes to Your Current Session
+```bash 
+source ~/.bashrc
+```
 
 ## 🏁 Quick Start
 ### Step 1: Configure Your Cloud Credentials
@@ -56,13 +78,18 @@ Download the pre-compiled binary for your operating system from the Latest Relea
 infrakit uses the official AWS SDK, which automatically detects your credentials.
 The easiest way to set this up is by installing the AWS CLI and running:
 
+```bash
 aws configure
-
+```
 
 ### Step 2: Sync Your Resources
 
 Before you can search, you need to build the local cache.
 The sync command fetches metadata for all supported resources and saves it to ~/.infrakit/cache.json.
+
+```bash
+infrakit sync
+```
 
 Note: Run this command periodically to keep your cache up-to-date with your live infrastructure.
 
