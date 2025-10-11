@@ -1,4 +1,21 @@
-1. Install cobra - 
+## Running Infrakit on local dev laptop 
+
+```bash 
+go run main.go sync
+```
+
+## Setup the default project the Quota project
+
+```bash
+gcloud auth login
+
+gcloud services enable cloudasset.googleapis.com --project=gcp-terraform-307119 
+
+gcloud auth application-default set-quota-project gcp-terraform-307119
+```
+
+
+1.Install cobra - 
 
 ```
 go get -u github.com/spf13/cobra@latest
