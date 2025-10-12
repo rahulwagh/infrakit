@@ -12,16 +12,6 @@ import (
 		"github.com/aws/aws-sdk-go-v2/service/iam" // <-- This is the corrected line
 )
 
-// StandardizedResource is our common format for any cloud resource.
-type StandardizedResource struct {
-	Provider   string            `json:"provider"`
-	Service    string            `json:"service"`
-	Region     string            `json:"region"`
-	ID         string            `json:"id"`
-	Name       string            `json:"name"`
-	Attributes map[string]string `json:"attributes"`
-}
-
 // FetchEC2Instances contains the logic to fetch all EC2 instances.
 func FetchEC2Instances() ([]StandardizedResource, error) {
 	var resources []StandardizedResource
