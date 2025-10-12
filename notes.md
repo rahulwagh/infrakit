@@ -14,6 +14,22 @@ gcloud services enable cloudasset.googleapis.com --project=gcp-terraform-307119
 gcloud auth application-default set-quota-project gcp-terraform-307119
 ```
 
+## Generate binaries 
+
+```bash 
+# For Linux (amd64)
+GOOS=linux GOARCH=amd64 go build -o dist/infrakit-linux-amd64 .
+
+# For Windows (amd64)
+GOOS=windows GOARCH=amd64 go build -o dist/infrakit-windows-amd64.exe .
+
+# For macOS (amd64 - Intel)
+GOOS=darwin GOARCH=amd64 go build -o dist/infrakit-macos-amd64 .
+
+# For macOS (arm64 - Apple Silicon)
+GOOS=darwin GOARCH=arm64 go build -o dist/infrakit-macos-arm64 . 
+```
+
 
 1.Install cobra - 
 
