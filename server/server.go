@@ -2,11 +2,11 @@
 package server
 
 import (
+	"embed"
 	"encoding/json"
 	"log"
 	"net/http"
 	"sort"
-	"embed" // NEW: Import the embed package
 
 	"github.com/rahulwagh/infrakit/cache"
 	"github.com/rahulwagh/infrakit/fetcher"
@@ -14,48 +14,81 @@ import (
 )
 
 //go:embed index.html
-// NEW: This directive tells Go to embed the index.html file into the 'content' variable.
 var content embed.FS
 
-// handleSearch is the function that powers our /search API endpoint.
+// handleSearch is for the initial fuzzy search.
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		http.Error(w, "query parameter 'q' is required", http.StatusBadRequest)
 		return
 	}
-
 	resources, err := cache.LoadResources()
 	if err != nil {
 		http.Error(w, "Failed to load cache. Run 'sync' first.", http.StatusInternalServerError)
 		return
 	}
-
 	var searchTargets []string
 	for _, res := range resources {
-		searchTargets = append(searchTargets, res.Name+" "+res.ID)
+		// We only want to search for top-level resources like projects initially.
+		if res.Service == "project" || res.Service == "ec2" {
+			searchTargets = append(searchTargets, res.Name+" "+res.ID)
+		}
 	}
-
 	ranks := fuzzy.RankFind(query, searchTargets)
 	sort.Sort(ranks)
-
 	var results []fetcher.StandardizedResource
-	for _, rank := range ranks {
-		results = append(results, resources[rank.OriginalIndex])
+
+
+	// A simpler search for now: iterate all resources to find matches.
+	for _, res := range resources {
+		if fuzzy.Match(query, res.Name+" "+res.ID) {
+			results = append(results, res)
+		}
 	}
+
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
 
+// NEW: handleGetResources finds all child resources for a given parent project.
+func handleGetResources(w http.ResponseWriter, r *http.Request) {
+	parentProjectID := r.URL.Query().Get("parent")
+	if parentProjectID == "" {
+		http.Error(w, "query parameter 'parent' is required", http.StatusBadRequest)
+		return
+	}
+
+	allResources, err := cache.LoadResources()
+	if err != nil {
+		http.Error(w, "Failed to load cache", http.StatusInternalServerError)
+		return
+	}
+
+	// Group child resources by their service type (vpc, subnet, etc.)
+	groupedChildren := make(map[string][]fetcher.StandardizedResource)
+
+	for _, res := range allResources {
+		if projID, ok := res.Attributes["project_id"]; ok && projID == parentProjectID {
+			groupedChildren[res.Service] = append(groupedChildren[res.Service], res)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(groupedChildren)
+}
+
 // StartServer starts the local web server.
 func StartServer() {
-	// CHANGED: We now create a file server that serves content directly from our embedded variable.
 	fs := http.FileServer(http.FS(content))
 	http.Handle("/", fs)
 
-	// This is our API endpoint for searching.
-	http.HandleFunc("/search", handleSearch)
+	// API endpoint for the initial fuzzy search
+	http.HandleFunc("/api/search", handleSearch)
+
+	// NEW: API endpoint to get children of a specific resource
+	http.HandleFunc("/api/resources", handleGetResources)
 
 	log.Println("Starting server on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
