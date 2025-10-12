@@ -7,14 +7,46 @@ import (
 	"log"
 
 	asset "cloud.google.com/go/asset/apiv1"
-	//resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	"google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/iterator"
 	assetpb "google.golang.org/genproto/googleapis/cloud/asset/v1"
-	//resourcemanagerpb "google.golang.org/genproto/googleapis/cloud/resourcemanager/v3"
-	"google.golang.org/api/cloudresourcemanager/v1"
+	resourcemanagerpb "google.golang.org/genproto/googleapis/cloud/resourcemanager/v3"
 )
 
-// --- Fetcher for Organization Hierarchy ---
+// fetcher/gcp_fetcher.go
+
+// --- Add this new function to the file ---
+
+// DiscoverGCPOrganization searches for an organization the user can access.
+// It returns the first organization found (e.g., "organizations/12345") or an empty string if none are found.
+func DiscoverGCPOrganization() (string, error) {
+	ctx := context.Background()
+
+	// We use the v3 client to search for organizations.
+	orgClient, err := resourcemanager.NewOrganizationsClient(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to create organizations client: %w", err)
+	}
+	defer orgClient.Close()
+
+	log.Println("Checking for a GCP Organization...")
+	req := &resourcemanagerpb.SearchOrganizationsRequest{Query: ""}
+	it := orgClient.SearchOrganizations(ctx, req)
+
+	// We only need the first organization the user has access to.
+	firstOrg, err := it.Next()
+	if err == iterator.Done {
+		log.Println("No GCP Organization found.")
+		return "", nil // No organization found, not an error.
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed during organization search: %w", err)
+	}
+
+	log.Println("Found GCP Organization:", firstOrg.DisplayName)
+	return firstOrg.Name, nil // Return the org name, e.g., "organizations/123456789"
+}
 
 // FetchGCPResourcesFromOrg uses the Cloud Asset API to fetch all folders and projects in an organization.
 func FetchGCPResourcesFromOrg(organizationID string) ([]StandardizedResource, error) {

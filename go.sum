@@ -18,6 +18,8 @@ cloud.google.com/go/orgpolicy v1.15.1 h1:0hq12wxNwcfUMojr5j3EjWECSInIuyYDhkAWXTo
 cloud.google.com/go/orgpolicy v1.15.1/go.mod h1:bpvi9YIyU7wCW9WiXL/ZKT7pd2Ovegyr2xENIeRX5q0=
 cloud.google.com/go/osconfig v1.15.1 h1:QQzK5njfsfO2rdOWYVDyLQktqSq9gKf2ohRYeKUuA10=
 cloud.google.com/go/osconfig v1.15.1/go.mod h1:NegylQQl0+5m+I+4Ey/g3HGeQxKkncQ1q+Il4DZ8PME=
+cloud.google.com/go/resourcemanager v1.10.7 h1:oPZKIdjyVTuag+D4HF7HO0mnSqcqgjcuA18xblwA0V0=
+cloud.google.com/go/resourcemanager v1.10.7/go.mod h1:rScGkr6j2eFwxAjctvOP/8sqnEpDbQ9r5CKwKfomqjs=
 github.com/aws/aws-sdk-go-v2 v1.39.2 h1:EJLg8IdbzgeD7xgvZ+I8M1e0fL0ptn/M47lianzth0I=
 github.com/aws/aws-sdk-go-v2 v1.39.2/go.mod h1:sDioUELIUO9Znk23YVmIk86/9DOpkbyyVb1i/gUNFXY=
 github.com/aws/aws-sdk-go-v2/config v1.31.12 h1:pYM1Qgy0dKZLHX2cXslNacbcEFMkDMl+Bcj5ROuS6p8=

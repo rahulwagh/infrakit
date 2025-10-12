@@ -31,17 +31,19 @@ var syncCmd = &cobra.Command{
 		allResources = append(allResources, iamResources...)
 
 		// --- GCP ---
-		// CONFIGURE THIS VARIABLE based on your GCP setup.
-		// - If you have an Organization, put your numeric Org ID here (e.g., "1234567890").
-		// - If you DO NOT have an Organization, leave this as an empty string ("").
-		gcpOrganizationID := "" // Or "YOUR_ORGANIZATION_ID"
+		// Automatically discover the organization ID. No more hardcoding!
+		gcpOrganizationID, err := fetcher.DiscoverGCPOrganization()
+		if err != nil {
+			// Log a warning but continue, as we can fall back to listing projects.
+			log.Printf("Warning: Could not discover GCP organization: %v", err)
+		}
 
 		var gcpResources []fetcher.StandardizedResource
 		if gcpOrganizationID != "" {
-			// Org ID is present, so scan the full hierarchy.
+			// If an Org was discovered, scan the full hierarchy.
 			gcpResources, err = fetcher.FetchGCPResourcesFromOrg(gcpOrganizationID)
 		} else {
-			// No Org ID, so just list all accessible projects.
+			// If no Org was found, just list all accessible projects.
 			gcpResources, err = fetcher.FetchGCPProjectsNoOrg()
 		}
 

@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	cloud.google.com/go/asset v1.21.1
+	cloud.google.com/go/resourcemanager v1.10.7
 	github.com/aws/aws-sdk-go-v2/config v1.31.12
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.254.1
 	github.com/aws/aws-sdk-go-v2/service/iam v1.47.7
