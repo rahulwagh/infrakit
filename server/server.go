@@ -6,11 +6,16 @@ import (
 	"log"
 	"net/http"
 	"sort"
+	"embed" // NEW: Import the embed package
 
 	"github.com/rahulwagh/infrakit/cache"
 	"github.com/rahulwagh/infrakit/fetcher"
 	"github.com/lithammer/fuzzysearch/fuzzy" // CHANGED
 )
+
+//go:embed index.html
+// NEW: This directive tells Go to embed the index.html file into the 'content' variable.
+var content embed.FS
 
 // handleSearch is the function that powers our /search API endpoint.
 func handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -31,8 +36,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		searchTargets = append(searchTargets, res.Name+" "+res.ID)
 	}
 
-	// Use the fuzzy subpackage directly.
-	ranks := fuzzy.RankFind(query, searchTargets) // CHANGED
+	ranks := fuzzy.RankFind(query, searchTargets)
 	sort.Sort(ranks)
 
 	var results []fetcher.StandardizedResource
@@ -46,10 +50,11 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 
 // StartServer starts the local web server.
 func StartServer() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "server/index.html")
-	})
+	// CHANGED: We now create a file server that serves content directly from our embedded variable.
+	fs := http.FileServer(http.FS(content))
+	http.Handle("/", fs)
 
+	// This is our API endpoint for searching.
 	http.HandleFunc("/search", handleSearch)
 
 	log.Println("Starting server on http://localhost:8080")
