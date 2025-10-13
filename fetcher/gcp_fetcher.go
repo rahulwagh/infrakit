@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/iterator"
 	assetpb "google.golang.org/genproto/googleapis/cloud/asset/v1"
 	resourcemanagerpb "google.golang.org/genproto/googleapis/cloud/resourcemanager/v3"
+	"strings"
 )
 
 // DiscoverGCPOrganization searches for an organization the user can access.
@@ -151,6 +152,12 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 	return allResources, nil
 }
 
+// fetcher/gcp_fetcher.go
+
+// fetcher/gcp_fetcher.go
+
+// --- Replace the existing FetchGCPNetworkResourcesForProject function with this ---
+
 // FetchGCPNetworkResourcesForProject scans a single project for its networking components.
 func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResource, error) {
 	ctx := context.Background()
@@ -163,7 +170,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 
 	log.Printf("   -> Fetching network resources for project: %s", projectID)
 
-	// 1. Fetch VPC Networks
+	// Fetch VPCs and Subnets (This part is unchanged)
 	networks, err := computeService.Networks.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list networks for project %s: %v", projectID, err)
@@ -172,13 +179,11 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 			networkResources = append(networkResources, StandardizedResource{
 				Provider: "gcp", Service: "vpc", Region: "global", ID: network.Name, Name: network.Name,
 				Attributes: map[string]string{
-					"project_id": projectID, "mode": fmt.Sprintf("%t", network.AutoCreateSubnetworks), // CORRECTED
+					"project_id": projectID, "mode": fmt.Sprintf("%t", network.AutoCreateSubnetworks),
 				},
 			})
 		}
 	}
-
-	// 2. Fetch Subnetworks
 	subnets, err := computeService.Subnetworks.AggregatedList(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list subnets for project %s: %v", projectID, err)
@@ -195,17 +200,59 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 		}
 	}
 
-	// 3. Fetch Firewall Rules
+	// Fetch Firewall Rules (CORRECTED LOGIC)
 	firewalls, err := computeService.Firewalls.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list firewall rules for project %s: %v", projectID, err)
 	} else {
 		for _, rule := range firewalls.Items {
+			// NEW: Helper specifically for Allowed rules
+			formatAllowedRules := func(details []*compute.FirewallAllowed) string {
+				var parts []string
+				for _, d := range details {
+					part := d.IPProtocol
+					if len(d.Ports) > 0 {
+						part += ":" + strings.Join(d.Ports, ",")
+					}
+					parts = append(parts, part)
+				}
+				return strings.Join(parts, "; ")
+			}
+
+			// NEW: Helper specifically for Denied rules
+			formatDeniedRules := func(details []*compute.FirewallDenied) string {
+				var parts []string
+				for _, d := range details {
+					part := d.IPProtocol
+					if len(d.Ports) > 0 {
+						part += ":" + strings.Join(d.Ports, ",")
+					}
+					parts = append(parts, part)
+				}
+				return strings.Join(parts, "; ")
+			}
+
+			action := "DENY"
+			if len(rule.Allowed) > 0 {
+				action = "ALLOW"
+			}
+
+			attributes := map[string]string{
+				"project_id":      projectID,
+				"action":          action,
+				"direction":       rule.Direction,
+				"priority":        fmt.Sprintf("%d", rule.Priority),
+				"disabled":        fmt.Sprintf("%t", rule.Disabled),
+				"source_ranges":   strings.Join(rule.SourceRanges, ", "),
+				"target_tags":     strings.Join(rule.TargetTags, ", "),
+				// CORRECTED: Call the appropriate helper for each type
+				"allowed":         formatAllowedRules(rule.Allowed),
+				"denied":          formatDeniedRules(rule.Denied),
+			}
+
 			networkResources = append(networkResources, StandardizedResource{
 				Provider: "gcp", Service: "firewall", Region: "global", ID: rule.Name, Name: rule.Name,
-				Attributes: map[string]string{
-					"project_id":      projectID, "direction": rule.Direction, "priority": fmt.Sprintf("%d", rule.Priority),
-				},
+				Attributes: attributes,
 			})
 		}
 	}

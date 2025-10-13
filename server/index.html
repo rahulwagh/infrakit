@@ -8,30 +8,42 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; color: #212529; margin: 0; padding: 2rem; }
         h1 { text-align: center; color: #343a40; }
         #search-box { display: block; width: 100%; max-width: 600px; margin: 2rem auto; padding: 1rem; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ced4da; box-sizing: border-box; }
-        #results { max-width: 800px; margin: 2rem auto; }
+        #results { max-width: 95%; margin: 2rem auto; }
         .result-item { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .result-item h3 { margin: 0 0 0.5rem 0; }
+        .result-item h3, .expandable-section h4 { margin: 0 0 0.5rem 0; }
         .result-item p { margin: 0.2rem 0; color: #6c757d; }
-        .result-item code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; }
+        .result-item code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
         .expandable { cursor: pointer; color: #007bff; }
         .expandable:hover { text-decoration: underline; }
         .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; display: none; }
         .child-item { margin-left: 20px; padding: 0.5rem; border-left: 2px solid #e9ecef; }
+        .firewall-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
+        .firewall-table th, .firewall-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
+        .firewall-table th { background-color: #f8f9fa; }
+        .firewall-table tr:hover { background-color: #f1f1f1; }
+        tr.allow-rule { background-color: #e6ffed; }
+        tr.deny-rule { background-color: #ffe6e6; }
+        .action-cell-allow { color: #28a745; font-weight: bold; }
+        .action-cell-deny { color: #dc3545; font-weight: bold; }
     </style>
 </head>
 <body>
 <h1>☁️ Infrakit Explorer</h1>
-<input type="text" id="search-box" placeholder="Search for projects...">
+<input type="text" id="search-box" placeholder="Search for projects, EC2 instances, etc.">
 <div id="results"></div>
 
 <script>
     const searchBox = document.getElementById('search-box');
     const resultsDiv = document.getElementById('results');
 
+    // This function performs the initial fuzzy search
     const performSearch = async () => {
         const query = searchBox.value;
         resultsDiv.innerHTML = (query.length > 0) ? '<p>Searching...</p>' : '';
-        if (query.length < 2) return;
+        if (query.length < 2) {
+            resultsDiv.innerHTML = '';
+            return;
+        }
 
         try {
             const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
@@ -40,17 +52,17 @@
                 return;
             }
             const results = await response.json();
-            resultsDiv.innerHTML = ''; // Clear previous results
+            resultsDiv.innerHTML = '';
 
             if (results && results.length > 0) {
                 results.forEach(res => {
-                    // We only want to display top-level items like projects and EC2 instances
+                    // We only want to display top-level items like projects and EC2 instances in the initial search
                     if (res.service === 'project' || res.service === 'ec2') {
                         const item = document.createElement('div');
                         item.className = 'result-item';
                         item.innerHTML = `
                             <h3 class="expandable" data-id="${res.id}" data-type="${res.service}">${res.name}</h3>
-                            <p><strong>ID:</strong> <code>${res.id}</code> | <strong>Service:</strong> ${res.service}</p>
+                            <p><strong>ID:</strong> <code>${res.id}</code> | <strong>Service:</strong> ${res.service} | <strong>Provider:</strong> ${res.provider}</p>
                             <div class="child-container" id="children-${res.id}" style="display: none;"></div>
                         `;
                         resultsDiv.appendChild(item);
@@ -64,13 +76,14 @@
         }
     };
 
+    // This function fetches and displays the children (VPCs, subnets, etc.) of a clicked project
     const fetchAndDisplayChildren = async (parentId, parentType, container) => {
         if (container.dataset.loaded === 'true') {
             container.style.display = container.style.display === 'none' ? 'block' : 'none';
             return;
         }
-        if (parentType !== 'project') { // Only projects are expandable for now
-            container.innerHTML = '<p>No further details available.</p>';
+        if (parentType !== 'project') {
+            container.innerHTML = '<p>No further details available for this resource type.</p>';
             container.style.display = 'block';
             container.dataset.loaded = 'true';
             return;
@@ -97,9 +110,51 @@
                     container.innerHTML += `<div class="child-item"><strong>VPC:</strong> ${vpc.name}${subnetsHTML}</div>`;
                 });
             }
-            // Render Firewall rules
+
+            // Render Firewall rules in a table
             if (children.firewall && children.firewall.length > 0) {
-                container.innerHTML += `<div class="child-item"><strong>Firewall Rules:</strong> (${children.firewall.length} rules found)</div>`;
+                let tableRows = '';
+                children.firewall.sort((a,b) => a.attributes.priority - b.attributes.priority).forEach(rule => {
+                    const isAllowRule = rule.attributes.action === 'ALLOW';
+                    const rowClass = isAllowRule ? 'allow-rule' : 'deny-rule';
+                    const actionClass = isAllowRule ? 'action-cell-allow' : 'action-cell-deny';
+                    const ruleDetails = isAllowRule ? rule.attributes.allowed : rule.attributes.denied;
+
+                    tableRows += `
+                        <tr class="${rowClass}">
+                            <td><code>${rule.attributes.priority}</code></td>
+                            <td>${rule.name}</td>
+                            <td><code>${rule.attributes.direction}</code></td>
+                            <td class="${actionClass}">${rule.attributes.action}</td>
+                            <td><code>${ruleDetails || 'none'}</code></td>
+                            <td><code>${rule.attributes.source_ranges || 'any'}</code></td>
+                            <td><code>${rule.attributes.target_tags || 'any'}</code></td>
+                        </tr>
+                    `;
+                });
+
+                container.innerHTML += `
+                    <div class="child-item">
+                        <h4 class="expandable" data-type="firewall-list">Firewall Rules (${children.firewall.length})</h4>
+                        <div class="child-container" id="firewall-children-${parentId}" style="display: none;">
+                            <table class="firewall-table">
+                                <thead>
+                                    <tr>
+                                        <th>Priority</th>
+                                        <th>Name</th>
+                                        <th>Direction</th>
+                                        <th>Action</th>
+                                        <th>Protocols/Ports</th>
+                                        <th>Source Ranges</th>
+                                        <th>Target Tags</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${tableRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
             }
 
         } catch(e) {
@@ -107,16 +162,27 @@
         }
     };
 
+    // --- Event Listeners ---
+
+    // Listener for the search box input
     searchBox.addEventListener('keyup', performSearch);
 
-    // Use event delegation for click handlers on dynamic content
+    // Listener for clicks on the results area (handles expanding items)
     resultsDiv.addEventListener('click', (event) => {
         const target = event.target;
         if (target && target.classList.contains('expandable')) {
-            const id = target.dataset.id;
             const type = target.dataset.type;
-            const container = document.getElementById(`children-${id}`);
-            fetchAndDisplayChildren(id, type, container);
+            const id = target.dataset.id;
+
+            if (type === 'project' || type === 'ec2') {
+                const container = document.getElementById(`children-${id}`);
+                fetchAndDisplayChildren(id, type, container);
+            } else if (type === 'firewall-list') {
+                const container = target.nextElementSibling;
+                if (container) {
+                    container.style.display = container.style.display === 'none' ? 'block' : 'none';
+                }
+            }
         }
     });
 </script>
