@@ -76,13 +76,13 @@
 
     const renderAppInfraTab = (element, children, parentId) => {
         let html = '';
-         if (children.cloudrun && children.cloudrun.length > 0) {
+        if (children.cloudrun && children.cloudrun.length > 0) {
             html += '<h4>Cloud Run Services</h4>';
             let tableRows = '';
             children.cloudrun.forEach(cr => {
-                tableRows += `<tr><td>${cr.name}</td><td><a href="${cr.attributes.url}" target="_blank">${cr.attributes.url}</a></td><td><code>${cr.attributes.image}</code></td></tr>`;
+                tableRows += `<tr><td>${cr.name}</td><td><a href="${cr.attributes.url}" target="_blank">${cr.attributes.url}</a></td><td><code>${cr.attributes.image}</code></td><td>${cr.region}</td><td><code>${cr.attributes.vpc.split('/').pop() || 'N/A'}</code></td><td><code>${cr.attributes.subnet.split('/').pop() || 'N/A'}</code></td></tr>`;
             });
-            html += `<table class="data-table"><thead><tr><th>Service Name</th><th>URL</th><th>Image</th></tr></thead><tbody>${tableRows}</tbody></table>`;
+            html += `<table class="data-table"><thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead><tbody>${tableRows}</tbody></table>`;
         }
 
         html += '<div id="lb-flows-container"><h4>Load Balancer Flows</h4><p>Loading...</p></div>';

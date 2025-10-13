@@ -193,8 +193,6 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 	}
 	return networkResources, nil
 }
-
-// FetchGCPCloudRunServices fetches all Cloud Run services for a given project.
 func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) {
 	ctx := context.Background()
 	var cloudRunResources []StandardizedResource
@@ -212,10 +210,31 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 	}
 
 	for _, service := range resp.Items {
-		if len(service.Spec.Template.Spec.Containers) > 0 {
+		if service.Spec != nil && service.Spec.Template != nil && service.Spec.Template.Spec != nil && len(service.Spec.Template.Spec.Containers) > 0 {
+			attributes := map[string]string{
+				"project_id": projectID,
+				"url":        service.Status.Url,
+				"image":      service.Spec.Template.Spec.Containers[0].Image,
+				"vpc":        "N/A", // Default values
+				"subnet":     "N/A",
+			}
+
+			// CORRECTED: Check for VPC Access configuration in the v1 API's annotations.
+			if service.Spec.Template.Metadata != nil && service.Spec.Template.Metadata.Annotations != nil {
+				annotations := service.Spec.Template.Metadata.Annotations
+				if connectorName, ok := annotations["run.googleapis.com/vpc-access-connector"]; ok {
+					attributes["vpc"] = "via-connector"
+					attributes["subnet"] = connectorName // The connector name is the "subnet" in this context
+				}
+			}
+
 			cloudRunResources = append(cloudRunResources, StandardizedResource{
-				Provider: "gcp", Service: "cloudrun", Region: service.Metadata.Labels["cloud.googleapis.com/location"], ID: service.Metadata.Name, Name: service.Metadata.Name,
-				Attributes: map[string]string{"project_id": projectID, "url": service.Status.Url, "image": service.Spec.Template.Spec.Containers[0].Image},
+				Provider:   "gcp",
+				Service:    "cloudrun",
+				Region:     service.Metadata.Labels["cloud.googleapis.com/location"],
+				ID:         service.Metadata.Name,
+				Name:       service.Metadata.Name,
+				Attributes: attributes,
 			})
 		}
 	}
