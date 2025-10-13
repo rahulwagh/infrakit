@@ -117,7 +117,6 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 	call := crmService.Projects.List()
 	err = call.Pages(ctx, func(page *cloudresourcemanager.ListProjectsResponse) error {
 		for _, project := range page.Projects {
-			// This is the block that was missing from the abbreviated code
 			standardizedRes := StandardizedResource{
 				Provider: "gcp", Service: "project", Region: "global", ID: project.ProjectId, Name: project.Name,
 				Attributes: map[string]string{
@@ -159,33 +158,27 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 	}
 	log.Printf("   -> Fetching network resources for project: %s", projectID)
 
-	networks, err := computeService.Networks.List(projectID).Do()
-	if err != nil {
-		log.Printf("Warning: could not list networks for project %s: %v", projectID, err)
-	} else {
+	networks, _ := computeService.Networks.List(projectID).Do()
+	if networks != nil {
 		for _, network := range networks.Items {
 			networkResources = append(networkResources, StandardizedResource{Provider: "gcp", Service: "vpc", Region: "global", ID: network.Name, Name: network.Name, Attributes: map[string]string{"project_id": projectID, "mode": fmt.Sprintf("%t", network.AutoCreateSubnetworks)}})
 		}
 	}
-	subnets, err := computeService.Subnetworks.AggregatedList(projectID).Do()
-	if err != nil {
-		log.Printf("Warning: could not list subnets for project %s: %v", projectID, err)
-	} else {
+	subnets, _ := computeService.Subnetworks.AggregatedList(projectID).Do()
+	if subnets != nil {
 		for _, scope := range subnets.Items {
 			for _, subnet := range scope.Subnetworks {
 				networkResources = append(networkResources, StandardizedResource{Provider: "gcp", Service: "subnet", Region: subnet.Region, ID: subnet.Name, Name: subnet.Name, Attributes: map[string]string{"project_id": projectID, "vpc": subnet.Network, "cidr_range": subnet.IpCidrRange}})
 			}
 		}
 	}
-	firewallList, err := computeService.Firewalls.List(projectID).Do()
-	if err != nil {
-		log.Printf("Warning: could not list firewall rules for project %s: %v", projectID, err)
-	} else {
+	firewallList, _ := computeService.Firewalls.List(projectID).Do()
+	if firewallList != nil {
 		for _, listRule := range firewallList.Items {
 			rule, err := computeService.Firewalls.Get(projectID, listRule.Name).Do()
 			if err != nil { log.Printf("Warning: could not get full details for firewall rule %s: %v", listRule.Name, err); continue }
-			formatAllowedRules := func(details []*compute.FirewallAllowed) string { var parts []string; for _, d := range details { part := d.IPProtocol; if len(d.Ports) > 0 { part += ":" + strings.Join(d.Ports, ",") }; parts = append(parts, part) }; return strings.Join(parts, "; ") }
-			formatDeniedRules := func(details []*compute.FirewallDenied) string { var parts []string; for _, d := range details { part := d.IPProtocol; if len(d.Ports) > 0 { part += ":" + strings.Join(d.Ports, ",") }; parts = append(parts, part) }; return strings.Join(parts, "; ") }
+			formatAllowedRules := func(details []*compute.FirewallAllowed) string { var p []string; for _, d := range details { r := d.IPProtocol; if len(d.Ports) > 0 { r += ":" + strings.Join(d.Ports, ",") }; p = append(p, r) }; return strings.Join(p, "; ") }
+			formatDeniedRules := func(details []*compute.FirewallDenied) string { var p []string; for _, d := range details { r := d.IPProtocol; if len(d.Ports) > 0 { r += ":" + strings.Join(d.Ports, ",") }; p = append(p, r) }; return strings.Join(p, "; ") }
 			action := "DENY"; if len(rule.Allowed) > 0 { action = "ALLOW" }
 			attributes := map[string]string{"project_id": projectID, "action": action, "direction": rule.Direction, "priority": fmt.Sprintf("%d", rule.Priority), "disabled": fmt.Sprintf("%t", rule.Disabled), "source_ranges": strings.Join(rule.SourceRanges, ", "), "destination_ranges": strings.Join(rule.DestinationRanges, ", "), "target_tags": strings.Join(rule.TargetTags, ", "), "allowed": formatAllowedRules(rule.Allowed), "denied": formatDeniedRules(rule.Denied)}
 			networkResources = append(networkResources, StandardizedResource{Provider: "gcp", Service: "firewall", Region: "global", ID: rule.Name, Name: rule.Name, Attributes: attributes})
@@ -193,6 +186,8 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 	}
 	return networkResources, nil
 }
+
+// FetchGCPCloudRunServices fetches all Cloud Run services for a given project using the v1 API.
 func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) {
 	ctx := context.Background()
 	var cloudRunResources []StandardizedResource
@@ -215,16 +210,15 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 				"project_id": projectID,
 				"url":        service.Status.Url,
 				"image":      service.Spec.Template.Spec.Containers[0].Image,
-				"vpc":        "N/A", // Default values
+				"vpc":        "N/A",
 				"subnet":     "N/A",
 			}
 
-			// CORRECTED: Check for VPC Access configuration in the v1 API's annotations.
 			if service.Spec.Template.Metadata != nil && service.Spec.Template.Metadata.Annotations != nil {
 				annotations := service.Spec.Template.Metadata.Annotations
 				if connectorName, ok := annotations["run.googleapis.com/vpc-access-connector"]; ok {
 					attributes["vpc"] = "via-connector"
-					attributes["subnet"] = connectorName // The connector name is the "subnet" in this context
+					attributes["subnet"] = connectorName
 				}
 			}
 
@@ -240,3 +234,4 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 	}
 	return cloudRunResources, nil
 }
+// NOTE: The extra closing brace from the original file has been removed.
