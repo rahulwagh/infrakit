@@ -7,6 +7,7 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; color: #212529; margin: 0; padding: 2rem; }
         h1, h4 { text-align: center; color: #343a40; }
+        h4 { margin-top: 2rem; }
         #search-box { display: block; width: 100%; max-width: 600px; margin: 2rem auto; padding: 1rem; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ced4da; box-sizing: border-box; }
         #results { max-width: 95%; margin: 2rem auto; }
         .result-item { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
@@ -28,11 +29,6 @@
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
         .allow-cell code { background-color: #d4edda; border-color: #c3e6cb; }
-        .flow-container { display: flex; align-items: stretch; gap: 1rem; margin-top: 1rem; background-color: #f8f9fa; padding: 1rem; border-radius: 8px; }
-        .flow-card { flex: 1; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; background-color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
-        .flow-card h5 { margin-top: 0; border-bottom: 1px solid #e9ecef; padding-bottom: 0.5rem; color: #495057; }
-        .flow-card p { font-size: 0.9em; margin: 0.5rem 0; }
-        .flow-arrow { display: flex; align-items: center; font-size: 2.5em; color: #adb5bd; }
         .armor-shield { font-size: 1.2em; color: #007bff; }
     </style>
 </head>
@@ -85,28 +81,56 @@
             html += `<table class="data-table"><thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead><tbody>${tableRows}</tbody></table>`;
         }
 
-        html += '<div id="lb-flows-container"><h4>Load Balancer Flows</h4><p>Loading...</p></div>';
+        html += '<div id="lb-flows-container-' + parentId + '"><h4>Load Balancers</h4><p>Loading...</p></div>';
         element.innerHTML = html;
 
-        const lbFlowsContainer = element.querySelector('#lb-flows-container');
+        const lbFlowsContainer = element.querySelector('#lb-flows-container-' + parentId);
         fetch(`/api/lb-flows?project=${encodeURIComponent(parentId)}`)
             .then(response => response.json())
             .then(flows => {
                 if (!flows || flows.length === 0) {
-                    lbFlowsContainer.innerHTML = '<h4>Load Balancer Flows</h4><p>No complete Load Balancer -> Cloud Run flows were found in the cache.</p>';
+                    lbFlowsContainer.innerHTML = '<h4>Load Balancers</h4><p>No complete Load Balancer flows were found in the cache for this project.</p>';
                     return;
                 }
-                let flowsHTML = '';
+
+                let tableRows = '';
                 flows.forEach(flow => {
-                    const frontendCard = `<div class="flow-card"><h5>Frontend: ${flow.frontend.ipAddress || 'Not Found'}</h5><p><strong>Port:</strong> <code>${flow.frontend.portRange}</code></p><p><strong>Protocol:</strong> <code>${flow.frontend.protocol}</code></p></div>`;
-                    const routingCard = `<div class="flow-card"><h5>Routing Rules</h5>${flow.routingRules.map(r => `<p><strong>Hosts:</strong> <code>${r.hosts.join(', ')}</code></p>`).join('')}</div>`;
-                    const backendCard = `<div class="flow-card"><h5>Backend: ${flow.backend.name}</h5><p><strong>Type:</strong> ${flow.backend.type}</p><p><strong>Service:</strong> ${flow.backend.serviceName}</p>${flow.cloudArmor.name ? `<p><span class="armor-shield">🛡️</span> <strong>Cloud Armor:</strong> ${flow.cloudArmor.name}</p>` : ''}</div>`;
-                    flowsHTML += `<h5>Flow: ${flow.name}</h5><div class="flow-container">${frontendCard}<div class="flow-arrow">&rarr;</div>${routingCard}<div class="flow-arrow">&rarr;</div>${backendCard}</div><hr style="margin: 2rem 0;"/>`;
+                    const certs = (flow.frontend.certificates || []).map(c => c.split('/').pop()).join(', ');
+                    tableRows += `
+                        <tr>
+                            <td>${flow.frontend.region || 'global'}</td>
+                            <td>${flow.name}</td>
+                            <td><code>${flow.frontend.ipAddress}:${flow.frontend.portRange}</code></td>
+                            <td><code>${flow.frontend.protocol}</code></td>
+                            <td><code>${certs || 'none'}</code></td>
+                            <td>${flow.backend.name}</td>
+                            <td>${flow.backend.serviceName || 'N/A'}</td>
+                            <td>${flow.cloudArmor.name ? `<span class="armor-shield">🛡️</span> ${flow.cloudArmor.name}` : 'none'}</td>
+                        </tr>
+                    `;
                 });
-                lbFlowsContainer.innerHTML = `<h4>Load Balancer Flows</h4>${flowsHTML}`;
+
+                lbFlowsContainer.innerHTML = `
+                    <h4>Load Balancers</h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Region</th>
+                                <th>Frontend Service</th>
+                                <th>IP:Port</th>
+                                <th>Protocol</th>
+                                <th>Certificate</th>
+                                <th>Backend Service</th>
+                                <th>Backend</th>
+                                <th>Cloud Armor</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                `;
             })
             .catch(e => {
-                lbFlowsContainer.innerHTML = '<h4>Load Balancer Flows</h4><p>Could not load Load Balancer flows.</p>';
+                lbFlowsContainer.innerHTML = '<h4>Load Balancers</h4><p>Could not load Load Balancer details.</p>';
             });
     };
 

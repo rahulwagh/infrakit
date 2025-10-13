@@ -4,9 +4,11 @@ package server
 import (
 	"embed"
 	"encoding/json"
+	//"fmt"
 	"log"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/rahulwagh/infrakit/cache"
 	"github.com/rahulwagh/infrakit/fetcher"
@@ -79,16 +81,103 @@ func handleGetResources(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(groupedChildren)
 }
 
-// StartServer starts the local web server.
+// CORRECTED: Full implementation for building Load Balancer flows on-demand from cache.
+func handleGetLBFlows(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project")
+	if projectID == "" {
+		http.Error(w, "query parameter 'project' is required", http.StatusBadRequest)
+		return
+	}
+
+	allResources, err := cache.LoadResources()
+	if err != nil {
+		http.Error(w, "Failed to load cache", http.StatusInternalServerError)
+		return
+	}
+
+	// Create maps for easy lookup of components by their NAME.
+	backendServices := make(map[string]fetcher.StandardizedResource)
+	urlMaps := make(map[string]fetcher.StandardizedResource)
+	targetProxies := make(map[string]fetcher.StandardizedResource)
+	cloudRunServices := make(map[string]fetcher.StandardizedResource)
+
+	for _, res := range allResources {
+		if proj, ok := res.Attributes["project_id"]; ok && proj == projectID {
+			switch res.Service {
+			case "backendservice":
+				backendServices[res.Name] = res
+			case "urlmap":
+				urlMaps[res.Name] = res
+			case "targethttpsproxy":
+				targetProxies[res.Name] = res
+			case "cloudrun":
+				cloudRunServices[res.Name] = res
+			}
+		}
+	}
+
+	var flows []fetcher.LoadBalancerFlow
+
+	// Start from the outside: Iterate through all cached Forwarding Rules for the project.
+	for _, res := range allResources {
+		if res.Service == "forwardingrule" && res.Attributes["project_id"] == projectID {
+			flow := fetcher.LoadBalancerFlow{
+				Name:      res.Name,
+				ProjectID: projectID,
+				Frontend: fetcher.FrontendConfig{
+					IPAddress: res.Attributes["ip_address"],
+					PortRange: res.Attributes["port_range"],
+					Protocol:  res.Attributes["protocol"],
+				},
+			}
+
+			// 1. Trace Forwarding Rule -> Target Proxy
+			targetURL := res.Attributes["target"]
+			proxyName := targetURL[strings.LastIndex(targetURL, "/")+1:]
+			if proxy, ok := targetProxies[proxyName]; ok {
+
+				// 2. Trace Target Proxy -> URL Map
+				urlMapURL := proxy.Attributes["url_map"]
+				urlMapName := urlMapURL[strings.LastIndex(urlMapURL, "/")+1:]
+				if urlMap, ok2 := urlMaps[urlMapName]; ok2 {
+					flow.RoutingRules = append(flow.RoutingRules, fetcher.RoutingRule{Hosts: []string{"all"}, PathMatcher: "default"})
+
+					// 3. Trace URL Map -> Backend Service
+					backendServiceURL := urlMap.Attributes["default_service"]
+					backendServiceName := backendServiceURL[strings.LastIndex(backendServiceURL, "/")+1:]
+					if bs, ok3 := backendServices[backendServiceName]; ok3 {
+						flow.Backend.Name = bs.Name
+
+						// 4. Find associated Cloud Run service (simple match)
+						for _, cr := range cloudRunServices {
+							if strings.Contains(bs.Name, cr.Name) {
+								flow.Backend.Type = "Cloud Run"
+								flow.Backend.ServiceName = cr.Name
+								flow.Backend.Region = cr.Region
+								break
+							}
+						}
+
+						// 5. Add Cloud Armor details
+						if policyURL, ok := bs.Attributes["cloud_armor_policy"]; ok && policyURL != "" {
+							flow.CloudArmor.Name = policyURL[strings.LastIndex(policyURL, "/")+1:]
+						}
+						flows = append(flows, flow)
+					}
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(flows)
+}
+
 func StartServer() {
-	fs := http.FileServer(http.FS(content))
-	http.Handle("/", fs)
-
-	// API endpoint for the initial fuzzy search
+	http.Handle("/", http.FileServer(http.FS(content)))
 	http.HandleFunc("/api/search", handleSearch)
-
-	// NEW: API endpoint to get children of a specific resource
 	http.HandleFunc("/api/resources", handleGetResources)
+	http.HandleFunc("/api/lb-flows", handleGetLBFlows)
 
 	log.Println("Starting server on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
