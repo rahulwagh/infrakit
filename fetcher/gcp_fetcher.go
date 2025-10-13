@@ -168,7 +168,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 
 	log.Printf("   -> Fetching network resources for project: %s", projectID)
 
-	// 1. Fetch VPC Networks (Full logic included)
+	// Fetch VPCs and Subnets (This part remains the same)
 	networks, err := computeService.Networks.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list networks for project %s: %v", projectID, err)
@@ -183,7 +183,6 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 		}
 	}
 
-	// 2. Fetch Subnetworks (Full logic included)
 	subnets, err := computeService.Subnetworks.AggregatedList(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list subnets for project %s: %v", projectID, err)
@@ -200,13 +199,20 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 		}
 	}
 
-	// 3. Fetch Firewall Rules (Full logic included)
-	firewalls, err := computeService.Firewalls.List(projectID).Do()
+	// Fetch Firewall Rules (CORRECTED LOGIC)
+	firewallList, err := computeService.Firewalls.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list firewall rules for project %s: %v", projectID, err)
 	} else {
-		for _, rule := range firewalls.Items {
-			// Helper specifically for Allowed rules
+		for _, listRule := range firewallList.Items {
+			// NEW: Get the full details for each rule individually.
+			rule, err := computeService.Firewalls.Get(projectID, listRule.Name).Do()
+			if err != nil {
+				log.Printf("Warning: could not get full details for firewall rule %s: %v", listRule.Name, err)
+				continue // Skip to the next rule
+			}
+
+			// Helper for Allowed rules
 			formatAllowedRules := func(details []*compute.FirewallAllowed) string {
 				var parts []string
 				for _, d := range details {
@@ -219,7 +225,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 				return strings.Join(parts, "; ")
 			}
 
-			// Helper specifically for Denied rules
+			// Helper for Denied rules
 			formatDeniedRules := func(details []*compute.FirewallDenied) string {
 				var parts []string
 				for _, d := range details {
@@ -237,6 +243,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 				action = "ALLOW"
 			}
 
+			// Now, these fields will be properly populated from the full 'rule' object.
 			attributes := map[string]string{
 				"project_id":         projectID,
 				"action":             action,
