@@ -6,24 +6,34 @@
     <title>Infrakit Explorer</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; color: #212529; margin: 0; padding: 2rem; }
-        h1 { text-align: center; color: #343a40; }
+        h1, h4 { text-align: center; color: #343a40; }
         #search-box { display: block; width: 100%; max-width: 600px; margin: 2rem auto; padding: 1rem; font-size: 1.2rem; border-radius: 8px; border: 1px solid #ced4da; box-sizing: border-box; }
         #results { max-width: 95%; margin: 2rem auto; }
         .result-item { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        .result-item h3, .expandable-section h4 { margin: 0 0 0.5rem 0; }
+        .result-item h3 { margin: 0 0 0.5rem 0; cursor: pointer; color: #007bff; }
+        .result-item h3:hover { text-decoration: underline; }
         .result-item p { margin: 0.2rem 0; color: #6c757d; }
-        .result-item code, .firewall-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
-        .expandable { cursor: pointer; color: #007bff; }
-        .expandable:hover { text-decoration: underline; }
+        .result-item code, .data-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
         .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; display: none; }
-        .child-item { margin-left: 20px; padding: 0.5rem; border-left: 2px solid #e9ecef; }
-        .firewall-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
-        .firewall-table th, .firewall-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
-        .firewall-table th { background-color: #f8f9fa; }
-        .firewall-table tr:hover { background-color: #f1f1f1; }
+        .child-item { margin-left: 20px; padding: 1rem; border-left: 2px solid #e9ecef; margin-top: 1rem; }
+        .tabs { display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
+        .tab-button { background-color: #f8f9fa; border: 1px solid transparent; border-bottom: none; padding: 0.5rem 1rem; cursor: pointer; font-size: 1em; }
+        .tab-button.active { background-color: #fff; border-color: #dee2e6 #dee2e6 #fff; font-weight: bold; }
+        .tab-content { display: none; padding: 1rem 0; }
+        .tab-content.active { display: block; }
+        .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
+        .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
+        .data-table th { background-color: #f8f9fa; }
+        .data-table tr:hover { background-color: #f1f1f1; }
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
         .allow-cell code { background-color: #d4edda; border-color: #c3e6cb; }
+        .flow-container { display: flex; align-items: stretch; gap: 1rem; margin-top: 1rem; background-color: #f8f9fa; padding: 1rem; border-radius: 8px; }
+        .flow-card { flex: 1; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; background-color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+        .flow-card h5 { margin-top: 0; border-bottom: 1px solid #e9ecef; padding-bottom: 0.5rem; color: #495057; }
+        .flow-card p { font-size: 0.9em; margin: 0.5rem 0; }
+        .flow-arrow { display: flex; align-items: center; font-size: 2.5em; color: #adb5bd; }
+        .armor-shield { font-size: 1.2em; color: #007bff; }
     </style>
 </head>
 <body>
@@ -35,6 +45,118 @@
     const searchBox = document.getElementById('search-box');
     const resultsDiv = document.getElementById('results');
 
+    // --- RENDER FUNCTIONS ---
+
+    const renderNetworkingTab = (element, children) => {
+        let html = '';
+        if (children.vpc && children.vpc.length > 0) {
+            children.vpc.forEach(vpc => {
+                let subnetsHTML = '';
+                if (children.subnet) {
+                    children.subnet.filter(s => s.attributes.vpc.endsWith(vpc.id)).forEach(subnet => {
+                        subnetsHTML += `<div class="child-item">↳ <strong>Subnet:</strong> ${subnet.name} (<code>${subnet.attributes.cidr_range}</code>)</div>`;
+                    });
+                }
+                html += `<div class="child-item"><strong>VPC:</strong> ${vpc.name}${subnetsHTML}</div>`;
+            });
+        }
+        if (children.firewall && children.firewall.length > 0) {
+            let tableRows = '';
+            children.firewall.sort((a,b) => parseInt(a.attributes.priority) - parseInt(b.attributes.priority)).forEach(rule => {
+                const isAllowRule = rule.attributes.action === 'ALLOW';
+                const actionClass = isAllowRule ? 'action-cell-allow' : 'action-cell-deny';
+                const ipRangeClass = isAllowRule ? 'allow-cell' : '';
+                const ruleDetails = isAllowRule ? rule.attributes.allowed : rule.attributes.denied;
+                tableRows += `<tr><td><code>${rule.attributes.priority}</code></td><td>${rule.name}</td><td><code>${rule.attributes.direction}</code></td><td class="${actionClass}">${rule.attributes.action}</td><td><code>${ruleDetails || 'none'}</code></td><td class="${ipRangeClass}"><code>${rule.attributes.source_ranges || 'any'}</code></td><td class="${ipRangeClass}"><code>${rule.attributes.destination_ranges || 'any'}</code></td></tr>`;
+            });
+            html += `<div class="child-item"><h4>Firewall Rules (${children.firewall.length})</h4><table class="data-table firewall-table"><thead><tr><th>Priority</th><th>Name</th><th>Direction</th><th>Action</th><th>Protocols/Ports</th><th>Source Ranges</th><th>Destination Ranges</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+        }
+        element.innerHTML = html || '<p>No networking resources found for this project.</p>';
+    };
+
+    const renderAppInfraTab = (element, children, parentId) => {
+        let html = '';
+         if (children.cloudrun && children.cloudrun.length > 0) {
+            html += '<h4>Cloud Run Services</h4>';
+            let tableRows = '';
+            children.cloudrun.forEach(cr => {
+                tableRows += `<tr><td>${cr.name}</td><td><a href="${cr.attributes.url}" target="_blank">${cr.attributes.url}</a></td><td><code>${cr.attributes.image}</code></td></tr>`;
+            });
+            html += `<table class="data-table"><thead><tr><th>Service Name</th><th>URL</th><th>Image</th></tr></thead><tbody>${tableRows}</tbody></table>`;
+        }
+
+        html += '<div id="lb-flows-container"><h4>Load Balancer Flows</h4><p>Loading...</p></div>';
+        element.innerHTML = html;
+
+        const lbFlowsContainer = element.querySelector('#lb-flows-container');
+        fetch(`/api/lb-flows?project=${encodeURIComponent(parentId)}`)
+            .then(response => response.json())
+            .then(flows => {
+                if (!flows || flows.length === 0) {
+                    lbFlowsContainer.innerHTML = '<h4>Load Balancer Flows</h4><p>No complete Load Balancer -> Cloud Run flows were found in the cache.</p>';
+                    return;
+                }
+                let flowsHTML = '';
+                flows.forEach(flow => {
+                    const frontendCard = `<div class="flow-card"><h5>Frontend: ${flow.frontend.ipAddress || 'Not Found'}</h5><p><strong>Port:</strong> <code>${flow.frontend.portRange}</code></p><p><strong>Protocol:</strong> <code>${flow.frontend.protocol}</code></p></div>`;
+                    const routingCard = `<div class="flow-card"><h5>Routing Rules</h5>${flow.routingRules.map(r => `<p><strong>Hosts:</strong> <code>${r.hosts.join(', ')}</code></p>`).join('')}</div>`;
+                    const backendCard = `<div class="flow-card"><h5>Backend: ${flow.backend.name}</h5><p><strong>Type:</strong> ${flow.backend.type}</p><p><strong>Service:</strong> ${flow.backend.serviceName}</p>${flow.cloudArmor.name ? `<p><span class="armor-shield">🛡️</span> <strong>Cloud Armor:</strong> ${flow.cloudArmor.name}</p>` : ''}</div>`;
+                    flowsHTML += `<h5>Flow: ${flow.name}</h5><div class="flow-container">${frontendCard}<div class="flow-arrow">&rarr;</div>${routingCard}<div class="flow-arrow">&rarr;</div>${backendCard}</div><hr style="margin: 2rem 0;"/>`;
+                });
+                lbFlowsContainer.innerHTML = `<h4>Load Balancer Flows</h4>${flowsHTML}`;
+            })
+            .catch(e => {
+                lbFlowsContainer.innerHTML = '<h4>Load Balancer Flows</h4><p>Could not load Load Balancer flows.</p>';
+            });
+    };
+
+    const renderTabs = (container, children, parentId) => {
+        container.innerHTML = `
+            <div class="tabs">
+                <button class="tab-button active" data-tab="networking">Networking</button>
+                <button class="tab-button" data-tab="app-infra">App Infrastructure</button>
+            </div>
+            <div id="networking-${parentId}" class="tab-content active"></div>
+            <div id="app-infra-${parentId}" class="tab-content"></div>
+        `;
+        const networkingContent = container.querySelector(`#networking-${parentId}`);
+        const appInfraContent = container.querySelector(`#app-infra-${parentId}`);
+
+        renderNetworkingTab(networkingContent, children);
+        renderAppInfraTab(appInfraContent, children, parentId);
+
+        container.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                container.querySelectorAll('.tab-button, .tab-content').forEach(el => el.classList.remove('active'));
+                button.classList.add('active');
+                container.querySelector(`#${button.dataset.tab}-${parentId}`).classList.add('active');
+            });
+        });
+    };
+
+    const fetchAndDisplayChildren = async (parentId, parentType, container) => {
+        if (container.dataset.loaded === 'true') {
+            container.style.display = container.style.display === 'none' ? 'block' : 'none';
+            return;
+        }
+        if (parentType !== 'project') {
+            container.innerHTML = '<p>No further details available for this resource type.</p>';
+            container.style.display = 'block'; container.dataset.loaded = 'true';
+            return;
+        }
+        container.innerHTML = '<p>Loading details...</p>';
+        container.style.display = 'block';
+        try {
+            const response = await fetch(`/api/resources?parent=${encodeURIComponent(parentId)}`);
+            const children = await response.json();
+            container.dataset.loaded = 'true';
+            renderTabs(container, children, parentId);
+        } catch(e) {
+            container.innerHTML = '<p>Could not load details.</p>';
+        }
+    };
+
     const performSearch = async () => {
         const query = searchBox.value;
         resultsDiv.innerHTML = (query.length > 0) ? '<p>Searching...</p>' : '';
@@ -42,26 +164,22 @@
             resultsDiv.innerHTML = '';
             return;
         }
-
         try {
             const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
             if (!response.ok) {
-                resultsDiv.innerHTML = `<p>Error: ${await response.text()}</p>`;
-                return;
+                resultsDiv.innerHTML = `<p>Error: ${await response.text()}</p>`; return;
             }
             const results = await response.json();
             resultsDiv.innerHTML = '';
-
             if (results && results.length > 0) {
                 results.forEach(res => {
                     if (res.service === 'project' || res.service === 'ec2') {
                         const item = document.createElement('div');
                         item.className = 'result-item';
                         item.innerHTML = `
-                            <h3 class="expandable" data-id="${res.id}" data-type="${res.service}">${res.name}</h3>
+                            <h3 data-id="${res.id}" data-type="${res.service}">${res.name}</h3>
                             <p><strong>ID:</strong> <code>${res.id}</code> | <strong>Service:</strong> ${res.service} | <strong>Provider:</strong> ${res.provider}</p>
-                            <div class="child-container" id="children-${res.id}" style="display: none;"></div>
-                        `;
+                            <div class="child-container" id="children-${res.id}" style="display: none;"></div>`;
                         resultsDiv.appendChild(item);
                     }
                 });
@@ -73,107 +191,16 @@
         }
     };
 
-    const fetchAndDisplayChildren = async (parentId, parentType, container) => {
-        if (container.dataset.loaded === 'true') {
-            container.style.display = container.style.display === 'none' ? 'block' : 'none';
-            return;
-        }
-        if (parentType !== 'project') {
-            container.innerHTML = '<p>No further details available for this resource type.</p>';
-            container.style.display = 'block';
-            container.dataset.loaded = 'true';
-            return;
-        }
-
-        container.innerHTML = '<p>Loading details...</p>';
-        container.style.display = 'block';
-
-        try {
-            const response = await fetch(`/api/resources?parent=${encodeURIComponent(parentId)}`);
-            const children = await response.json();
-            container.innerHTML = '';
-            container.dataset.loaded = 'true';
-
-            if (children.vpc && children.vpc.length > 0) {
-                children.vpc.forEach(vpc => {
-                    let subnetsHTML = '';
-                    if (children.subnet) {
-                        children.subnet.filter(s => s.attributes.vpc.endsWith(vpc.id)).forEach(subnet => {
-                            subnetsHTML += `<div class="child-item">↳ <strong>Subnet:</strong> ${subnet.name} (<code>${subnet.attributes.cidr_range}</code>)</div>`;
-                        });
-                    }
-                    container.innerHTML += `<div class="child-item"><strong>VPC:</strong> ${vpc.name}${subnetsHTML}</div>`;
-                });
-            }
-
-            if (children.firewall && children.firewall.length > 0) {
-                let tableRows = '';
-                children.firewall.sort((a,b) => a.attributes.priority - b.attributes.priority).forEach(rule => {
-                    const isAllowRule = rule.attributes.action === 'ALLOW';
-                    const actionClass = isAllowRule ? 'action-cell-allow' : 'action-cell-deny';
-                    const ipRangeClass = isAllowRule ? 'allow-cell' : '';
-                    const ruleDetails = isAllowRule ? rule.attributes.allowed : rule.attributes.denied;
-
-                    tableRows += `
-                        <tr>
-                            <td><code>${rule.attributes.priority}</code></td>
-                            <td>${rule.name}</td>
-                            <td><code>${rule.attributes.direction}</code></td>
-                            <td class="${actionClass}">${rule.attributes.action}</td>
-                            <td><code>${ruleDetails || 'none'}</code></td>
-                            <td class="${ipRangeClass}"><code>${rule.attributes.source_ranges || 'any'}</code></td>
-                            <td class="${ipRangeClass}"><code>${rule.attributes.destination_ranges || 'any'}</code></td>
-                            <td><code>${rule.attributes.target_tags || 'any'}</code></td>
-                        </tr>
-                    `;
-                });
-
-                container.innerHTML += `
-                    <div class="child-item">
-                        <h4 class="expandable" data-type="firewall-list">Firewall Rules (${children.firewall.length})</h4>
-                        <div class="child-container" id="firewall-children-${parentId}" style="display: none;">
-                            <table class="firewall-table">
-                                <thead>
-                                    <tr>
-                                        <th>Priority</th>
-                                        <th>Name</th>
-                                        <th>Direction</th>
-                                        <th>Action</th>
-                                        <th>Protocols/Ports</th>
-                                        <th>Source Ranges</th>
-                                        <th>Destination Ranges</th>
-                                        <th>Target Tags</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${tableRows}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>`;
-            }
-
-        } catch(e) {
-            container.innerHTML = '<p>Could not load details.</p>';
-        }
-    };
-
     searchBox.addEventListener('keyup', performSearch);
 
     resultsDiv.addEventListener('click', (event) => {
         const target = event.target;
-        if (target && target.classList.contains('expandable')) {
+        if (target && target.tagName === 'H3') {
             const type = target.dataset.type;
             const id = target.dataset.id;
-
-            if (type === 'project' || type === 'ec2') {
-                const container = document.getElementById(`children-${id}`);
+            const container = document.getElementById(`children-${id}`);
+            if (container) {
                 fetchAndDisplayChildren(id, type, container);
-            } else if (type === 'firewall-list') {
-                const container = target.nextElementSibling;
-                if (container) {
-                    container.style.display = container.style.display === 'none' ? 'block' : 'none';
-                }
             }
         }
     });
