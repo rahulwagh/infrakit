@@ -12,7 +12,7 @@
         .result-item { background-color: #fff; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .result-item h3, .expandable-section h4 { margin: 0 0 0.5rem 0; }
         .result-item p { margin: 0.2rem 0; color: #6c757d; }
-        .result-item code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+        .result-item code, .firewall-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
         .expandable { cursor: pointer; color: #007bff; }
         .expandable:hover { text-decoration: underline; }
         .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; display: none; }
@@ -21,10 +21,9 @@
         .firewall-table th, .firewall-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
         .firewall-table th { background-color: #f8f9fa; }
         .firewall-table tr:hover { background-color: #f1f1f1; }
-        tr.allow-rule { background-color: #e6ffed; }
-        tr.deny-rule { background-color: #ffe6e6; }
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
+        .allow-cell code { background-color: #d4edda; border-color: #c3e6cb; }
     </style>
 </head>
 <body>
@@ -36,7 +35,6 @@
     const searchBox = document.getElementById('search-box');
     const resultsDiv = document.getElementById('results');
 
-    // This function performs the initial fuzzy search
     const performSearch = async () => {
         const query = searchBox.value;
         resultsDiv.innerHTML = (query.length > 0) ? '<p>Searching...</p>' : '';
@@ -56,7 +54,6 @@
 
             if (results && results.length > 0) {
                 results.forEach(res => {
-                    // We only want to display top-level items like projects and EC2 instances in the initial search
                     if (res.service === 'project' || res.service === 'ec2') {
                         const item = document.createElement('div');
                         item.className = 'result-item';
@@ -76,7 +73,6 @@
         }
     };
 
-    // This function fetches and displays the children (VPCs, subnets, etc.) of a clicked project
     const fetchAndDisplayChildren = async (parentId, parentType, container) => {
         if (container.dataset.loaded === 'true') {
             container.style.display = container.style.display === 'none' ? 'block' : 'none';
@@ -98,7 +94,6 @@
             container.innerHTML = '';
             container.dataset.loaded = 'true';
 
-            // Render VPCs and their subnets
             if (children.vpc && children.vpc.length > 0) {
                 children.vpc.forEach(vpc => {
                     let subnetsHTML = '';
@@ -111,23 +106,23 @@
                 });
             }
 
-            // Render Firewall rules in a table
             if (children.firewall && children.firewall.length > 0) {
                 let tableRows = '';
                 children.firewall.sort((a,b) => a.attributes.priority - b.attributes.priority).forEach(rule => {
                     const isAllowRule = rule.attributes.action === 'ALLOW';
-                    const rowClass = isAllowRule ? 'allow-rule' : 'deny-rule';
                     const actionClass = isAllowRule ? 'action-cell-allow' : 'action-cell-deny';
+                    const ipRangeClass = isAllowRule ? 'allow-cell' : '';
                     const ruleDetails = isAllowRule ? rule.attributes.allowed : rule.attributes.denied;
 
                     tableRows += `
-                        <tr class="${rowClass}">
+                        <tr>
                             <td><code>${rule.attributes.priority}</code></td>
                             <td>${rule.name}</td>
                             <td><code>${rule.attributes.direction}</code></td>
                             <td class="${actionClass}">${rule.attributes.action}</td>
                             <td><code>${ruleDetails || 'none'}</code></td>
-                            <td><code>${rule.attributes.source_ranges || 'any'}</code></td>
+                            <td class="${ipRangeClass}"><code>${rule.attributes.source_ranges || 'any'}</code></td>
+                            <td class="${ipRangeClass}"><code>${rule.attributes.destination_ranges || 'any'}</code></td>
                             <td><code>${rule.attributes.target_tags || 'any'}</code></td>
                         </tr>
                     `;
@@ -146,6 +141,7 @@
                                         <th>Action</th>
                                         <th>Protocols/Ports</th>
                                         <th>Source Ranges</th>
+                                        <th>Destination Ranges</th>
                                         <th>Target Tags</th>
                                     </tr>
                                 </thead>
@@ -162,12 +158,8 @@
         }
     };
 
-    // --- Event Listeners ---
-
-    // Listener for the search box input
     searchBox.addEventListener('keyup', performSearch);
 
-    // Listener for clicks on the results area (handles expanding items)
     resultsDiv.addEventListener('click', (event) => {
         const target = event.target;
         if (target && target.classList.contains('expandable')) {

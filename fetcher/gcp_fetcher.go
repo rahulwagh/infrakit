@@ -154,8 +154,6 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 
 // fetcher/gcp_fetcher.go
 
-// fetcher/gcp_fetcher.go
-
 // --- Replace the existing FetchGCPNetworkResourcesForProject function with this ---
 
 // FetchGCPNetworkResourcesForProject scans a single project for its networking components.
@@ -170,7 +168,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 
 	log.Printf("   -> Fetching network resources for project: %s", projectID)
 
-	// Fetch VPCs and Subnets (This part is unchanged)
+	// 1. Fetch VPC Networks (Full logic included)
 	networks, err := computeService.Networks.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list networks for project %s: %v", projectID, err)
@@ -184,6 +182,8 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 			})
 		}
 	}
+
+	// 2. Fetch Subnetworks (Full logic included)
 	subnets, err := computeService.Subnetworks.AggregatedList(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list subnets for project %s: %v", projectID, err)
@@ -200,13 +200,13 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 		}
 	}
 
-	// Fetch Firewall Rules (CORRECTED LOGIC)
+	// 3. Fetch Firewall Rules (Full logic included)
 	firewalls, err := computeService.Firewalls.List(projectID).Do()
 	if err != nil {
 		log.Printf("Warning: could not list firewall rules for project %s: %v", projectID, err)
 	} else {
 		for _, rule := range firewalls.Items {
-			// NEW: Helper specifically for Allowed rules
+			// Helper specifically for Allowed rules
 			formatAllowedRules := func(details []*compute.FirewallAllowed) string {
 				var parts []string
 				for _, d := range details {
@@ -219,7 +219,7 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 				return strings.Join(parts, "; ")
 			}
 
-			// NEW: Helper specifically for Denied rules
+			// Helper specifically for Denied rules
 			formatDeniedRules := func(details []*compute.FirewallDenied) string {
 				var parts []string
 				for _, d := range details {
@@ -238,16 +238,16 @@ func FetchGCPNetworkResourcesForProject(projectID string) ([]StandardizedResourc
 			}
 
 			attributes := map[string]string{
-				"project_id":      projectID,
-				"action":          action,
-				"direction":       rule.Direction,
-				"priority":        fmt.Sprintf("%d", rule.Priority),
-				"disabled":        fmt.Sprintf("%t", rule.Disabled),
-				"source_ranges":   strings.Join(rule.SourceRanges, ", "),
-				"target_tags":     strings.Join(rule.TargetTags, ", "),
-				// CORRECTED: Call the appropriate helper for each type
-				"allowed":         formatAllowedRules(rule.Allowed),
-				"denied":          formatDeniedRules(rule.Denied),
+				"project_id":         projectID,
+				"action":             action,
+				"direction":          rule.Direction,
+				"priority":           fmt.Sprintf("%d", rule.Priority),
+				"disabled":           fmt.Sprintf("%t", rule.Disabled),
+				"source_ranges":      strings.Join(rule.SourceRanges, ", "),
+				"destination_ranges": strings.Join(rule.DestinationRanges, ", "),
+				"target_tags":        strings.Join(rule.TargetTags, ", "),
+				"allowed":            formatAllowedRules(rule.Allowed),
+				"denied":             formatDeniedRules(rule.Denied),
 			}
 
 			networkResources = append(networkResources, StandardizedResource{
