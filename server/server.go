@@ -173,12 +173,31 @@ func handleGetLBFlows(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(flows)
 }
 
+
+// MODIFIED: StartServer now registers the new template handler
 func StartServer() {
-	http.Handle("/", http.FileServer(http.FS(content)))
+	// Serve index.html at the root
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Ensure only root path serves index.html, otherwise serve from embedded FS
+		if r.URL.Path == "/" {
+			indexBytes, err := content.ReadFile("index.html")
+			if err != nil {
+				log.Printf("Error reading embedded index.html: %v", err)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			w.Write(indexBytes)
+		} else {
+			// Fallback for any other path (might not be needed if index.html handles all JS routing)
+			http.FileServer(http.FS(content)).ServeHTTP(w, r)
+		}
+	})
+
+	// API endpoints
 	http.HandleFunc("/api/search", handleSearch)
 	http.HandleFunc("/api/resources", handleGetResources)
 	http.HandleFunc("/api/lb-flows", handleGetLBFlows)
-
 	log.Println("Starting server on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

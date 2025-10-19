@@ -62,7 +62,7 @@ func FetchGCPResourcesFromOrg(organizationID string) ([]StandardizedResource, er
 		if err != nil {
 			return nil, fmt.Errorf("failed during asset iteration: %w", err)
 		}
-
+		var standardizedRes StandardizedResource // Declare standardizedRes here
 		var projectID string
 		switch resource.AssetType {
 		case "cloudresourcemanager.googleapis.com/Project":
@@ -75,10 +75,11 @@ func FetchGCPResourcesFromOrg(organizationID string) ([]StandardizedResource, er
 					projectNumber = numVal.GetStringValue()
 				}
 			}
-			allResources = append(allResources, StandardizedResource{
+			standardizedRes = StandardizedResource{
 				Provider: "gcp", Service: "project", Region: "global", ID: projectID, Name: resource.GetDisplayName(),
 				Attributes: map[string]string{"state": resource.GetState(), "project_number": projectNumber},
-			})
+			}
+			allResources = append(allResources, standardizedRes)
 
 			if projectID != "" && projectID != "N/A" {
 				networkRes, _ := FetchGCPNetworkResourcesForProject(projectID)
@@ -87,12 +88,21 @@ func FetchGCPResourcesFromOrg(organizationID string) ([]StandardizedResource, er
 				allResources = append(allResources, cloudRunRes...)
 				appInfraRes, _ := FetchGCPAppInfraForProject(projectID)
 				allResources = append(allResources, appInfraRes...)
+
+				// CORRECTED: Added the missing call
+				iamRes, err := FetchGCPServiceAccounts(projectID)
+				if err != nil {
+					log.Printf("Warning: could not fetch service accounts for project %s: %v", projectID, err)
+					// Continue even if fetching SAs fails for one project
+				}
+				allResources = append(allResources, iamRes...)
 			}
 		case "cloudresourcemanager.googleapis.com/Folder":
-			allResources = append(allResources, StandardizedResource{
+			standardizedRes = StandardizedResource{
 				Provider: "gcp", Service: "folder", Region: "global", ID: resource.GetName(), Name: resource.GetDisplayName(),
 				Attributes: map[string]string{"state": resource.GetState()},
-			})
+			}
+			allResources = append(allResources, standardizedRes)
 		}
 	}
 	return allResources, nil
@@ -110,13 +120,14 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 	call := crmService.Projects.List()
 	err = call.Pages(ctx, func(page *cloudresourcemanager.ListProjectsResponse) error {
 		for _, project := range page.Projects {
-			allResources = append(allResources, StandardizedResource{
+			standardizedRes := StandardizedResource{
 				Provider: "gcp", Service: "project", Region: "global", ID: project.ProjectId, Name: project.Name,
 				Attributes: map[string]string{
 					"state":          project.LifecycleState,
 					"project_number": fmt.Sprintf("%d", project.ProjectNumber),
 				},
-			})
+			}
+			allResources = append(allResources, standardizedRes)
 
 			networkRes, _ := FetchGCPNetworkResourcesForProject(project.ProjectId)
 			allResources = append(allResources, networkRes...)
@@ -124,6 +135,15 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 			allResources = append(allResources, cloudRunRes...)
 			appInfraRes, _ := FetchGCPAppInfraForProject(project.ProjectId)
 			allResources = append(allResources, appInfraRes...)
+
+			// CORRECTED: Added the missing call
+			iamRes, err := FetchGCPServiceAccounts(project.ProjectId)
+			if err != nil {
+				log.Printf("Warning: could not fetch service accounts for project %s: %v", project.ProjectId, err)
+				// Continue to next project even if SA fetching fails for one
+				continue
+			}
+			allResources = append(allResources, iamRes...)
 		}
 		return nil
 	})

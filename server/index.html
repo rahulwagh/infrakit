@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Infrakit Explorer</title>
+    <title>Infrakit Explorer (Alpine.js)</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <style>
+        /* --- Styles remain exactly the same as before --- */
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f8f9fa; color: #212529; margin: 0; padding: 2rem; }
         h1, h4 { text-align: center; color: #343a40; }
         h4 { margin-top: 2rem; }
@@ -15,219 +17,250 @@
         .result-item h3:hover { text-decoration: underline; }
         .result-item p { margin: 0.2rem 0; color: #6c757d; }
         .result-item code, .data-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
-        .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; display: none; }
+        .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; /* display is handled by x-show */ }
         .child-item { margin-left: 20px; padding: 1rem; border-left: 2px solid #e9ecef; margin-top: 1rem; }
         .tabs { display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
         .tab-button { background-color: #f8f9fa; border: 1px solid transparent; border-bottom: none; padding: 0.5rem 1rem; cursor: pointer; font-size: 1em; }
         .tab-button.active { background-color: #fff; border-color: #dee2e6 #dee2e6 #fff; font-weight: bold; }
-        .tab-content { display: none; padding: 1rem 0; }
-        .tab-content.active { display: block; }
+        .tab-content { /* display is handled by x-show */ padding: 1rem 0; }
         .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
         .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
         .data-table th { background-color: #f8f9fa; }
-        .data-table tr:hover { background-color: #f1f1f1; }
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
         .allow-cell code { background-color: #d4edda; border-color: #c3e6cb; }
         .armor-shield { font-size: 1.2em; color: #007bff; }
+        [x-cloak] { display: none !important; } /* Hide elements until Alpine initializes */
     </style>
 </head>
-<body>
+<body x-data="infrakitExplorer()" x-cloak>
 <h1>☁️ Infrakit Explorer</h1>
-<input type="text" id="search-box" placeholder="Search for projects, EC2 instances, etc.">
-<div id="results"></div>
+
+<input type="text" id="search-box" placeholder="Search for projects, EC2 instances, etc."
+       x-model="query"
+       x-on:keyup.debounce.500ms="performSearch()">
+
+<div id="results">
+    <p x-show="isLoadingSearch">Searching...</p>
+    <p x-show="!isLoadingSearch && query.length >= 2 && searchResults.length === 0">No results found.</p>
+
+    <template x-for="result in searchResults" :key="result.id">
+        <div class="result-item">
+            <h3 x-text="result.name" x-on:click="toggleExpand(result.id, result.service)"></h3>
+            <p>
+                <strong>ID:</strong> <code x-text="result.id"></code> |
+                <strong>Service:</strong> <span x-text="result.service"></span> |
+                <strong>Provider:</strong> <span x-text="result.provider"></span>
+            </p>
+
+            <div class="child-container" x-show="expandedProjects[result.id]?.visible" x-transition>
+                <p x-show="isLoadingDetails[result.id]">Loading details...</p>
+
+                <div x-show="!isLoadingDetails[result.id] && expandedProjects[result.id]?.details">
+                    <div class="tabs">
+                        <button class="tab-button"
+                                :class="{ 'active': expandedProjects[result.id]?.activeTab === 'networking' }"
+                                x-on:click="expandedProjects[result.id].activeTab = 'networking'">Networking</button>
+                        <button class="tab-button"
+                                :class="{ 'active': expandedProjects[result.id]?.activeTab === 'app-infra' }"
+                                x-on:click="expandedProjects[result.id].activeTab = 'app-infra'">App Infrastructure</button>
+                        <button class="tab-button"
+                                :class="{ 'active': expandedProjects[result.id]?.activeTab === 'iam' }"
+                                x-on:click="expandedProjects[result.id].activeTab = 'iam'">IAM & Permissions</button>
+                    </div>
+
+                    <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'networking'" :class="{'active': expandedProjects[result.id]?.activeTab === 'networking'}">
+                        <template x-if="expandedProjects[result.id]?.details?.vpc?.length > 0">
+                            <div class="child-item">
+                                <h4>VPCs</h4>
+                                <template x-for="vpc in expandedProjects[result.id].details.vpc" :key="vpc.id">
+                                    <div>
+                                        <strong>VPC:</strong> <span x-text="vpc.name"></span>
+                                        <template x-if="expandedProjects[result.id].details.subnet?.length > 0">
+                                            <div>
+                                                <template x-for="subnet in expandedProjects[result.id].details.subnet.filter(s => s.attributes.vpc.endsWith(vpc.id))" :key="subnet.id">
+                                                    <div class="child-item">↳ <strong>Subnet:</strong> <span x-text="subnet.name"></span> (<code><span x-text="subnet.attributes.cidr_range"></span></code>)</div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="expandedProjects[result.id]?.details?.firewall?.length > 0">
+                            <div class="child-item">
+                                <h4>Firewall Rules (<span x-text="expandedProjects[result.id].details.firewall.length"></span>)</h4>
+                                <table class="data-table firewall-table">
+                                    <thead><tr><th>Priority</th><th>Name</th><th>Direction</th><th>Action</th><th>Protocols/Ports</th><th>Source Ranges</th><th>Destination Ranges</th></tr></thead>
+                                    <tbody>
+                                    <template x-for="rule in expandedProjects[result.id].details.firewall.sort((a,b) => parseInt(a.attributes.priority) - parseInt(b.attributes.priority))" :key="rule.id">
+                                        <tr>
+                                            <td><code x-text="rule.attributes.priority"></code></td>
+                                            <td x-text="rule.name"></td>
+                                            <td><code x-text="rule.attributes.direction"></code></td>
+                                            <td :class="{ 'action-cell-allow': rule.attributes.action === 'ALLOW', 'action-cell-deny': rule.attributes.action === 'DENY' }" x-text="rule.attributes.action"></td>
+                                            <td><code x-text="rule.attributes.action === 'ALLOW' ? (rule.attributes.allowed || 'none') : (rule.attributes.denied || 'none')"></code></td>
+                                            <td :class="{ 'allow-cell': rule.attributes.action === 'ALLOW' }"><code><span x-text="rule.attributes.source_ranges || 'any'"></span></code></td>
+                                            <td :class="{ 'allow-cell': rule.attributes.action === 'ALLOW' }"><code><span x-text="rule.attributes.destination_ranges || 'any'"></span></code></td>
+                                        </tr>
+                                    </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                        <p x-show="!expandedProjects[result.id]?.details?.vpc?.length && !expandedProjects[result.id]?.details?.firewall?.length">No networking resources found for this project.</p>
+                    </div>
+
+                    <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'app-infra'" :class="{'active': expandedProjects[result.id]?.activeTab === 'app-infra'}">
+                        <template x-if="expandedProjects[result.id]?.details?.cloudrun?.length > 0">
+                            <div>
+                                <h4>Cloud Run Services</h4>
+                                <table class="data-table">
+                                    <thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead>
+                                    <tbody>
+                                    <template x-for="cr in expandedProjects[result.id].details.cloudrun" :key="cr.id">
+                                        <tr>
+                                            <td x-text="cr.name"></td>
+                                            <td><a :href="cr.attributes.url" x-text="cr.attributes.url" target="_blank"></a></td>
+                                            <td><code x-text="cr.attributes.image"></code></td>
+                                            <td x-text="cr.region"></td>
+                                            <td><code x-text="(cr.attributes.vpc || 'N/A').split('/').pop()"></code></td>
+                                            <td><code x-text="(cr.attributes.subnet || 'N/A').split('/').pop()"></code></td>
+                                        </tr>
+                                    </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                        <div x-data="{ flows: expandedProjects[result.id]?.lbFlows || [] }">
+                            <h4>Load Balancers</h4>
+                            <p x-show="flows.length === 0 && !isLoadingDetails[result.id]">No complete Load Balancer flows found.</p>
+                            <template x-for="flow in flows" :key="flow.name">
+                                <div>
+                                    <h5>Flow: <span x-text="flow.name"></span></h5>
+                                    <div class="flow-container">
+                                        <div class="flow-card">
+                                            <h5>Frontend: <span x-text="flow.frontend.ipAddress || 'Not Found'"></span></h5>
+                                            <p><strong>Port:</strong> <code x-text="flow.frontend.portRange"></code></p>
+                                            <p><strong>Protocol:</strong> <code x-text="flow.frontend.protocol"></code></p>
+                                        </div>
+                                        <div class="flow-arrow">&rarr;</div>
+                                        <div class="flow-card">
+                                            <h5>Routing Rules</h5>
+                                            <template x-for="route in flow.routingRules">
+                                                <p><strong>Hosts:</strong> <code x-text="route.hosts.join(', ')"></code></p>
+                                            </template>
+                                        </div>
+                                        <div class="flow-arrow">&rarr;</div>
+                                        <div class="flow-card">
+                                            <h5>Backend: <span x-text="flow.backend.name"></span></h5>
+                                            <p><strong>Type:</strong> <span x-text="flow.backend.type"></span></p>
+                                            <p><strong>Service:</strong> <span x-text="flow.backend.serviceName"></span></p>
+                                            <template x-if="flow.cloudArmor.name">
+                                                <p><span class="armor-shield">🛡️</span> <strong>Cloud Armor:</strong> <span x-text="flow.cloudArmor.name"></span></p>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <hr style="margin: 2rem 0;"/>
+                                </div>
+                            </template>
+                        </div>
+                        <p x-show="!expandedProjects[result.id]?.details?.cloudrun?.length && expandedProjects[result.id]?.lbFlows?.length === 0">No application infrastructure found.</p>
+                    </div>
+
+                    <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'iam'" :class="{'active': expandedProjects[result.id]?.activeTab === 'iam'}">
+                        <template x-if="expandedProjects[result.id]?.details?.serviceaccount?.length > 0">
+                            <div>
+                                <h4>Service Accounts</h4>
+                                <table class="data-table">
+                                    <thead><tr><th>Display Name</th><th>Email</th><th>Unique ID</th><th>Disabled</th></tr></thead>
+                                    <tbody>
+                                    <template x-for="sa in expandedProjects[result.id].details.serviceaccount" :key="sa.id">
+                                        <tr>
+                                            <td x-text="sa.name || 'N/A'"></td>
+                                            <td><code x-text="sa.attributes.email"></code></td>
+                                            <td><code x-text="sa.attributes.unique_id"></code></td>
+                                            <td x-text="sa.attributes.disabled === 'true' ? 'Yes' : 'No'"></td>
+                                        </tr>
+                                    </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+                        <p x-show="!expandedProjects[result.id]?.details?.serviceaccount?.length">No Service Accounts found for this project.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
 
 <script>
-    const searchBox = document.getElementById('search-box');
-    const resultsDiv = document.getElementById('results');
+    function infrakitExplorer() {
+        return {
+            query: '',
+            searchResults: [],
+            isLoadingSearch: false,
+            expandedProjects: {}, // Stores state for each expanded project { id: { visible: bool, activeTab: string, details: {}, lbFlows: [], loaded: bool } }
+            isLoadingDetails: {}, // Stores loading state for project details { id: bool }
 
-    // --- RENDER FUNCTIONS ---
-
-    const renderNetworkingTab = (element, children) => {
-        let html = '';
-        if (children.vpc && children.vpc.length > 0) {
-            children.vpc.forEach(vpc => {
-                let subnetsHTML = '';
-                if (children.subnet) {
-                    children.subnet.filter(s => s.attributes.vpc.endsWith(vpc.id)).forEach(subnet => {
-                        subnetsHTML += `<div class="child-item">↳ <strong>Subnet:</strong> ${subnet.name} (<code>${subnet.attributes.cidr_range}</code>)</div>`;
-                    });
-                }
-                html += `<div class="child-item"><strong>VPC:</strong> ${vpc.name}${subnetsHTML}</div>`;
-            });
-        }
-        if (children.firewall && children.firewall.length > 0) {
-            let tableRows = '';
-            children.firewall.sort((a,b) => parseInt(a.attributes.priority) - parseInt(b.attributes.priority)).forEach(rule => {
-                const isAllowRule = rule.attributes.action === 'ALLOW';
-                const actionClass = isAllowRule ? 'action-cell-allow' : 'action-cell-deny';
-                const ipRangeClass = isAllowRule ? 'allow-cell' : '';
-                const ruleDetails = isAllowRule ? rule.attributes.allowed : rule.attributes.denied;
-                tableRows += `<tr><td><code>${rule.attributes.priority}</code></td><td>${rule.name}</td><td><code>${rule.attributes.direction}</code></td><td class="${actionClass}">${rule.attributes.action}</td><td><code>${ruleDetails || 'none'}</code></td><td class="${ipRangeClass}"><code>${rule.attributes.source_ranges || 'any'}</code></td><td class="${ipRangeClass}"><code>${rule.attributes.destination_ranges || 'any'}</code></td></tr>`;
-            });
-            html += `<div class="child-item"><h4>Firewall Rules (${children.firewall.length})</h4><table class="data-table firewall-table"><thead><tr><th>Priority</th><th>Name</th><th>Direction</th><th>Action</th><th>Protocols/Ports</th><th>Source Ranges</th><th>Destination Ranges</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
-        }
-        element.innerHTML = html || '<p>No networking resources found for this project.</p>';
-    };
-
-    const renderAppInfraTab = (element, children, parentId) => {
-        let html = '';
-        if (children.cloudrun && children.cloudrun.length > 0) {
-            html += '<h4>Cloud Run Services</h4>';
-            let tableRows = '';
-            children.cloudrun.forEach(cr => {
-                tableRows += `<tr><td>${cr.name}</td><td><a href="${cr.attributes.url}" target="_blank">${cr.attributes.url}</a></td><td><code>${cr.attributes.image}</code></td><td>${cr.region}</td><td><code>${cr.attributes.vpc.split('/').pop() || 'N/A'}</code></td><td><code>${cr.attributes.subnet.split('/').pop() || 'N/A'}</code></td></tr>`;
-            });
-            html += `<table class="data-table"><thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead><tbody>${tableRows}</tbody></table>`;
-        }
-
-        html += '<div id="lb-flows-container-' + parentId + '"><h4>Load Balancers</h4><p>Loading...</p></div>';
-        element.innerHTML = html;
-
-        const lbFlowsContainer = element.querySelector('#lb-flows-container-' + parentId);
-        fetch(`/api/lb-flows?project=${encodeURIComponent(parentId)}`)
-            .then(response => response.json())
-            .then(flows => {
-                if (!flows || flows.length === 0) {
-                    lbFlowsContainer.innerHTML = '<h4>Load Balancers</h4><p>No complete Load Balancer flows were found in the cache for this project.</p>';
+            async performSearch() {
+                if (this.query.length < 2) {
+                    this.searchResults = [];
                     return;
                 }
+                this.isLoadingSearch = true;
+                try {
+                    const response = await fetch(`/api/search?q=${encodeURIComponent(this.query)}`);
+                    if (!response.ok) throw new Error('Search failed');
+                    this.searchResults = await response.json();
+                } catch (error) {
+                    console.error("Search error:", error);
+                    this.searchResults = [];
+                } finally {
+                    this.isLoadingSearch = false;
+                }
+            },
 
-                let tableRows = '';
-                flows.forEach(flow => {
-                    const certs = (flow.frontend.certificates || []).map(c => c.split('/').pop()).join(', ');
-                    tableRows += `
-                        <tr>
-                            <td>${flow.frontend.region || 'global'}</td>
-                            <td>${flow.name}</td>
-                            <td><code>${flow.frontend.ipAddress}:${flow.frontend.portRange}</code></td>
-                            <td><code>${flow.frontend.protocol}</code></td>
-                            <td><code>${certs || 'none'}</code></td>
-                            <td>${flow.backend.name}</td>
-                            <td>${flow.backend.serviceName || 'N/A'}</td>
-                            <td>${flow.cloudArmor.name ? `<span class="armor-shield">🛡️</span> ${flow.cloudArmor.name}` : 'none'}</td>
-                        </tr>
-                    `;
-                });
+            async toggleExpand(id, type) {
+                if (type !== 'project') return; // Only projects are expandable
 
-                lbFlowsContainer.innerHTML = `
-                    <h4>Load Balancers</h4>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Region</th>
-                                <th>Frontend Service</th>
-                                <th>IP:Port</th>
-                                <th>Protocol</th>
-                                <th>Certificate</th>
-                                <th>Backend Service</th>
-                                <th>Backend</th>
-                                <th>Cloud Armor</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                `;
-            })
-            .catch(e => {
-                lbFlowsContainer.innerHTML = '<h4>Load Balancers</h4><p>Could not load Load Balancer details.</p>';
-            });
-    };
+                // Initialize state if first time clicking this project
+                if (!this.expandedProjects[id]) {
+                    // Set default active tab here
+                    this.expandedProjects[id] = { visible: false, activeTab: 'networking', details: null, lbFlows: [], loaded: false };
+                }
 
-    const renderTabs = (container, children, parentId) => {
-        container.innerHTML = `
-            <div class="tabs">
-                <button class="tab-button active" data-tab="networking">Networking</button>
-                <button class="tab-button" data-tab="app-infra">App Infrastructure</button>
-            </div>
-            <div id="networking-${parentId}" class="tab-content active"></div>
-            <div id="app-infra-${parentId}" class="tab-content"></div>
-        `;
-        const networkingContent = container.querySelector(`#networking-${parentId}`);
-        const appInfraContent = container.querySelector(`#app-infra-${parentId}`);
+                // Toggle visibility
+                this.expandedProjects[id].visible = !this.expandedProjects[id].visible;
 
-        renderNetworkingTab(networkingContent, children);
-        renderAppInfraTab(appInfraContent, children, parentId);
+                // Fetch data only if expanding for the first time
+                if (this.expandedProjects[id].visible && !this.expandedProjects[id].loaded) {
+                    this.isLoadingDetails[id] = true;
+                    try {
+                        // Fetch both resource details and LB flows concurrently
+                        const [resDetailsResponse, lbFlowsResponse] = await Promise.all([
+                            fetch(`/api/resources?parent=${encodeURIComponent(id)}`),
+                            fetch(`/api/lb-flows?project=${encodeURIComponent(id)}`)
+                        ]);
 
-        container.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                container.querySelectorAll('.tab-button, .tab-content').forEach(el => el.classList.remove('active'));
-                button.classList.add('active');
-                container.querySelector(`#${button.dataset.tab}-${parentId}`).classList.add('active');
-            });
-        });
-    };
+                        if (!resDetailsResponse.ok) throw new Error('Failed to fetch project details');
+                        if (!lbFlowsResponse.ok) throw new Error('Failed to fetch LB flows');
 
-    const fetchAndDisplayChildren = async (parentId, parentType, container) => {
-        if (container.dataset.loaded === 'true') {
-            container.style.display = container.style.display === 'none' ? 'block' : 'none';
-            return;
-        }
-        if (parentType !== 'project') {
-            container.innerHTML = '<p>No further details available for this resource type.</p>';
-            container.style.display = 'block'; container.dataset.loaded = 'true';
-            return;
-        }
-        container.innerHTML = '<p>Loading details...</p>';
-        container.style.display = 'block';
-        try {
-            const response = await fetch(`/api/resources?parent=${encodeURIComponent(parentId)}`);
-            const children = await response.json();
-            container.dataset.loaded = 'true';
-            renderTabs(container, children, parentId);
-        } catch(e) {
-            container.innerHTML = '<p>Could not load details.</p>';
-        }
-    };
+                        this.expandedProjects[id].details = await resDetailsResponse.json();
+                        this.expandedProjects[id].lbFlows = await lbFlowsResponse.json();
+                        this.expandedProjects[id].loaded = true;
 
-    const performSearch = async () => {
-        const query = searchBox.value;
-        resultsDiv.innerHTML = (query.length > 0) ? '<p>Searching...</p>' : '';
-        if (query.length < 2) {
-            resultsDiv.innerHTML = '';
-            return;
-        }
-        try {
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-            if (!response.ok) {
-                resultsDiv.innerHTML = `<p>Error: ${await response.text()}</p>`; return;
-            }
-            const results = await response.json();
-            resultsDiv.innerHTML = '';
-            if (results && results.length > 0) {
-                results.forEach(res => {
-                    if (res.service === 'project' || res.service === 'ec2') {
-                        const item = document.createElement('div');
-                        item.className = 'result-item';
-                        item.innerHTML = `
-                            <h3 data-id="${res.id}" data-type="${res.service}">${res.name}</h3>
-                            <p><strong>ID:</strong> <code>${res.id}</code> | <strong>Service:</strong> ${res.service} | <strong>Provider:</strong> ${res.provider}</p>
-                            <div class="child-container" id="children-${res.id}" style="display: none;"></div>`;
-                        resultsDiv.appendChild(item);
+                    } catch (error) {
+                        console.error(`Error fetching details for project ${id}:`, error);
+                        // Keep it visible to show an error message potentially
+                    } finally {
+                       this.isLoadingDetails[id] = false;
                     }
-                });
-            } else {
-                resultsDiv.innerHTML = '<p>No results found.</p>';
-            }
-        } catch (error) {
-            resultsDiv.innerHTML = `<p>Error fetching results. Is the server running?</p>`;
-        }
-    };
-
-    searchBox.addEventListener('keyup', performSearch);
-
-    resultsDiv.addEventListener('click', (event) => {
-        const target = event.target;
-        if (target && target.tagName === 'H3') {
-            const type = target.dataset.type;
-            const id = target.dataset.id;
-            const container = document.getElementById(`children-${id}`);
-            if (container) {
-                fetchAndDisplayChildren(id, type, container);
+                }
             }
         }
-    });
+    }
 </script>
 </body>
 </html>
