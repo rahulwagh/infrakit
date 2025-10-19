@@ -16,7 +16,7 @@
         .result-item h3 { margin: 0 0 0.5rem 0; cursor: pointer; color: #007bff; }
         .result-item h3:hover { text-decoration: underline; }
         .result-item p { margin: 0.2rem 0; color: #6c757d; }
-        .result-item code, .data-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; }
+        .result-item code, .data-table code { background-color: #e9ecef; padding: 0.2rem 0.4rem; border-radius: 4px; font-family: monospace; display: inline-block; /* Helps with wrapping */ }
         .child-container { border-top: 1px solid #e9ecef; margin-top: 1rem; padding-top: 1rem; /* display handled by x-show */ }
         .child-item { margin-left: 20px; padding: 1rem; border-left: 2px solid #e9ecef; margin-top: 1rem; }
         .tabs { display: flex; border-bottom: 1px solid #dee2e6; margin-bottom: 1rem; }
@@ -24,7 +24,7 @@
         .tab-button.active { background-color: #fff; border-color: #dee2e6 #dee2e6 #fff; font-weight: bold; }
         .tab-content { /* display handled by x-show */ padding: 1rem 0; }
         .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
-        .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; }
+        .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; vertical-align: top; /* Align roles list nicely */ }
         .data-table th { background-color: #f8f9fa; }
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
@@ -38,6 +38,7 @@
         .flow-card p { font-size: 0.9em; margin: 0.5rem 0; }
         .flow-arrow { display: flex; align-items: center; font-size: 2.5em; color: #adb5bd; }
         [x-cloak] { display: none !important; } /* Hide elements until Alpine initializes */
+        .role-list code { margin-bottom: 0.3em; } /* Spacing between roles */
     </style>
 </head>
 <body x-data="infrakitExplorer()" x-cloak>
@@ -180,7 +181,7 @@
                             <div>
                                 <h4>Service Accounts</h4>
                                 <table class="data-table">
-                                    <thead><tr><th>Display Name</th><th>Email</th><th>Unique ID</th><th>Disabled</th><th>Direct Roles</th></tr></thead>
+                                    <thead><tr><th>Display Name</th><th>Email</th><th>Unique ID</th><th>Disabled</th><th>Project Roles</th></tr></thead>
                                     <tbody>
                                     <template x-for="sa in expandedProjects[result.id].details.serviceaccount" :key="sa.id">
                                         <tr>
@@ -188,7 +189,16 @@
                                             <td><code x-text="sa.attributes.email"></code></td>
                                             <td><code x-text="sa.attributes.unique_id"></code></td>
                                             <td :class="sa.attributes.disabled === 'true' ? 'status-cell-disabled' : 'status-cell-enabled'" x-text="sa.attributes.disabled === 'true' ? 'Yes' : 'No'"></td>
-                                            <td><code x-text="sa.attributes.roles || 'N/A'"></code></td>
+                                            <td class="role-list">
+                                                <template x-if="sa.attributes.roles && sa.attributes.roles !== 'No direct roles found' && sa.attributes.roles !== 'Error fetching roles'">
+                                                    <template x-for="role in sa.attributes.roles.split(', ')" :key="role">
+                                                        <div><code x-text="role"></code></div>
+                                                    </template>
+                                                </template>
+                                                <template x-if="!sa.attributes.roles || sa.attributes.roles === 'No direct roles found' || sa.attributes.roles === 'Error fetching roles'">
+                                                    <span x-text="sa.attributes.roles || 'N/A'"></span>
+                                                </template>
+                                            </td>
                                         </tr>
                                     </template>
                                     </tbody>
