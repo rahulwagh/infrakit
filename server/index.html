@@ -120,26 +120,24 @@
                     </div>
 
                     <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'app-infra'" :class="{'active': expandedProjects[result.id]?.activeTab === 'app-infra'}">
-                        <template x-if="expandedProjects[result.id]?.details?.cloudrun?.length > 0">
-                            <div>
-                                <h4>Cloud Run Services</h4>
-                                <table class="data-table">
-                                    <thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead>
-                                    <tbody>
-                                    <template x-for="cr in expandedProjects[result.id].details.cloudrun" :key="cr.id">
-                                        <tr>
-                                            <td x-text="cr.name"></td>
-                                            <td><a :href="cr.attributes.url" x-text="cr.attributes.url" target="_blank"></a></td>
-                                            <td><code x-text="cr.attributes.image"></code></td>
-                                            <td x-text="cr.region"></td>
-                                            <td><code x-text="(cr.attributes.vpc || 'N/A').split('/').pop()"></code></td>
-                                            <td><code x-text="(cr.attributes.subnet || 'N/A').split('/').pop()"></code></td>
-                                        </tr>
-                                    </template>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </template>
+                        <div x-show="expandedProjects[result.id]?.details?.cloudrun && Array.isArray(expandedProjects[result.id].details.cloudrun) && expandedProjects[result.id].details.cloudrun.length > 0">
+                            <h4>Cloud Run Services (<span x-text="expandedProjects[result.id]?.details?.cloudrun?.length || 0"></span>)</h4>
+                            <table class="data-table">
+                                <thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead>
+                                <tbody>
+                                <template x-for="(cr, index) in (expandedProjects[result.id]?.details?.cloudrun || [])" :key="cr.id || index">
+                                    <tr>
+                                        <td x-text="cr.name"></td>
+                                        <td><a :href="cr.attributes.url" x-text="cr.attributes.url" target="_blank"></a></td>
+                                        <td><code x-text="cr.attributes.image"></code></td>
+                                        <td x-text="cr.region || 'N/A'"></td>
+                                        <td><code x-text="(cr.attributes.vpc || 'N/A').split('/').pop()"></code></td>
+                                        <td><code x-text="(cr.attributes.subnet || 'N/A').split('/').pop()"></code></td>
+                                    </tr>
+                                </template>
+                                </tbody>
+                            </table>
+                        </div>
                         <div x-data="{ flows: expandedProjects[result.id]?.lbFlows || [] }">
                             <h4>Load Balancers</h4>
                             <p x-show="flows.length === 0 && !isLoadingDetails[result.id]">No complete Load Balancer flows found.</p>
@@ -173,7 +171,14 @@
                                 </div>
                             </template>
                         </div>
-                        <p x-show="!expandedProjects[result.id]?.details?.cloudrun?.length && expandedProjects[result.id]?.lbFlows?.length === 0">No application infrastructure found.</p>
+                        <p x-show="(!expandedProjects[result.id]?.details?.cloudrun || expandedProjects[result.id]?.details?.cloudrun.length === 0) && (!expandedProjects[result.id]?.lbFlows || expandedProjects[result.id]?.lbFlows.length === 0)">No application infrastructure found.</p>
+                        <!-- Debug info (remove in production) -->
+                        <div x-show="expandedProjects[result.id]?.details" style="margin-top: 1em; padding: 0.5em; background: #f0f0f0; font-size: 0.85em;">
+                            <strong>Debug Info:</strong><br>
+                            CloudRun count: <span x-text="expandedProjects[result.id]?.details?.cloudrun?.length || 0"></span><br>
+                            LB Flows count: <span x-text="expandedProjects[result.id]?.lbFlows?.length || 0"></span><br>
+                            CloudRun is array: <span x-text="Array.isArray(expandedProjects[result.id]?.details?.cloudrun)"></span>
+                        </div>
                     </div>
 
                     <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'iam'" :class="{'active': expandedProjects[result.id]?.activeTab === 'iam'}">
@@ -251,6 +256,7 @@
 
                 if (this.expandedProjects[id].visible && !this.expandedProjects[id].loaded) {
                     this.isLoadingDetails[id] = true;
+                    console.log(`[DEBUG] Fetching details for project: ${id}`);
                     try {
                         const [resDetailsResponse, lbFlowsResponse] = await Promise.all([
                             fetch(`/api/resources?parent=${encodeURIComponent(id)}`),
@@ -260,8 +266,15 @@
                         if (!resDetailsResponse.ok) throw new Error(`Failed to fetch project details (${resDetailsResponse.status})`);
                         if (!lbFlowsResponse.ok) throw new Error(`Failed to fetch LB flows (${lbFlowsResponse.status})`);
 
-                        this.expandedProjects[id].details = await resDetailsResponse.json();
-                        this.expandedProjects[id].lbFlows = await lbFlowsResponse.json();
+                        const details = await resDetailsResponse.json();
+                        const lbFlows = await lbFlowsResponse.json();
+
+                        console.log(`[DEBUG] Project ${id} details:`, details);
+                        console.log(`[DEBUG] CloudRun services found:`, details.cloudrun?.length || 0);
+                        console.log(`[DEBUG] LB flows found:`, lbFlows?.length || 0);
+
+                        this.expandedProjects[id].details = details;
+                        this.expandedProjects[id].lbFlows = lbFlows;
                         this.expandedProjects[id].loaded = true;
 
                     } catch (error) {
