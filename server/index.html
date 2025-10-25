@@ -24,8 +24,18 @@
         .tab-button.active { background-color: #fff; border-color: #dee2e6 #dee2e6 #fff; font-weight: bold; }
         .tab-content { /* display handled by x-show */ padding: 1rem 0; }
         .data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9em; table-layout: fixed; }
-        .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; vertical-align: top; /* Align roles list nicely */ }
+        .data-table th, .data-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; word-wrap: break-word; vertical-align: top; overflow-wrap: break-word; /* Align roles list nicely */ }
         .data-table th { background-color: #f8f9fa; }
+        .data-table td { max-width: 0; } /* Force columns to respect table-layout: fixed */
+        /* Cloud Run table specific styles */
+        .cloudrun-table { table-layout: fixed; }
+        .cloudrun-table thead tr th:nth-child(1) { width: 12%; } /* Service Name */
+        .cloudrun-table thead tr th:nth-child(2) { width: 20%; } /* URL */
+        .cloudrun-table thead tr th:nth-child(3) { width: 28%; } /* Image - wider for long paths */
+        .cloudrun-table thead tr th:nth-child(4) { width: 12%; } /* Region */
+        .cloudrun-table thead tr th:nth-child(5) { width: 14%; } /* VPC */
+        .cloudrun-table thead tr th:nth-child(6) { width: 14%; } /* Subnet */
+        .cloudrun-table td code { word-break: break-all; white-space: normal; max-width: 100%; display: block; }
         .action-cell-allow { color: #28a745; font-weight: bold; }
         .action-cell-deny { color: #dc3545; font-weight: bold; }
         .allow-cell code { background-color: #d4edda; border-color: #c3e6cb; }
@@ -122,7 +132,7 @@
                     <div class="tab-content" x-show="expandedProjects[result.id]?.activeTab === 'app-infra'" :class="{'active': expandedProjects[result.id]?.activeTab === 'app-infra'}">
                         <div x-show="expandedProjects[result.id]?.details?.cloudrun && Array.isArray(expandedProjects[result.id].details.cloudrun) && expandedProjects[result.id].details.cloudrun.length > 0">
                             <h4>Cloud Run Services (<span x-text="expandedProjects[result.id]?.details?.cloudrun?.length || 0"></span>)</h4>
-                            <table class="data-table">
+                            <table class="data-table cloudrun-table">
                                 <thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead>
                                 <tbody :id="'cloudrun-tbody-' + result.id"></tbody>
                             </table>
