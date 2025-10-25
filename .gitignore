@@ -13,10 +13,21 @@ vendor/
 coverage.*
 
 # IDE and editor-specific directories/files
+# IntelliJ IDEA
 .idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# VS Code
 .vscode/
+
+# Vim
 *.swp
 *~
+
+# Sublime Text
 *.sublime-project
 *.sublime-workspace
 
