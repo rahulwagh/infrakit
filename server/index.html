@@ -71,7 +71,7 @@
                                 x-on:click="expandedProjects[result.id].activeTab = 'networking'">Networking</button>
                         <button class="tab-button"
                                 :class="{ 'active': expandedProjects[result.id]?.activeTab === 'app-infra' }"
-                                x-on:click="expandedProjects[result.id].activeTab = 'app-infra'">App Infrastructure</button>
+                                x-on:click="expandedProjects[result.id].activeTab = 'app-infra'; renderCloudRunTable(result.id, expandedProjects[result.id]?.details?.cloudrun)">App Infrastructure</button>
                         <button class="tab-button"
                                 :class="{ 'active': expandedProjects[result.id]?.activeTab === 'iam' }"
                                 x-on:click="expandedProjects[result.id].activeTab = 'iam'">IAM & Permissions</button>
@@ -124,18 +124,7 @@
                             <h4>Cloud Run Services (<span x-text="expandedProjects[result.id]?.details?.cloudrun?.length || 0"></span>)</h4>
                             <table class="data-table">
                                 <thead><tr><th>Service Name</th><th>URL</th><th>Image</th><th>Region</th><th>Network (VPC)</th><th>Subnet / Connector</th></tr></thead>
-                                <tbody>
-                                <template x-for="(cr, index) in (expandedProjects[result.id]?.details?.cloudrun || [])" :key="cr.id || index">
-                                    <tr>
-                                        <td x-text="cr.name"></td>
-                                        <td><a :href="cr.attributes.url" x-text="cr.attributes.url" target="_blank"></a></td>
-                                        <td><code x-text="cr.attributes.image"></code></td>
-                                        <td x-text="cr.region || 'N/A'"></td>
-                                        <td><code x-text="(cr.attributes.vpc || 'N/A').split('/').pop()"></code></td>
-                                        <td><code x-text="(cr.attributes.subnet || 'N/A').split('/').pop()"></code></td>
-                                    </tr>
-                                </template>
-                                </tbody>
+                                <tbody :id="'cloudrun-tbody-' + result.id"></tbody>
                             </table>
                         </div>
                         <div x-data="{ flows: expandedProjects[result.id]?.lbFlows || [] }">
@@ -277,6 +266,9 @@
                         this.expandedProjects[id].lbFlows = lbFlows;
                         this.expandedProjects[id].loaded = true;
 
+                        // Manually render Cloud Run table using vanilla JS
+                        this.renderCloudRunTable(id, details.cloudrun);
+
                     } catch (error) {
                         console.error(`Error fetching details for project ${id}:`, error);
                         // Optionally display error message in UI
@@ -284,6 +276,79 @@
                        this.isLoadingDetails[id] = false;
                     }
                 }
+            },
+
+            renderCloudRunTable(projectId, cloudRunServices) {
+                // Use vanilla JavaScript to render table rows
+                var tbody = document.getElementById('cloudrun-tbody-' + projectId);
+                if (!tbody) {
+                    console.log('[DEBUG] Cloud Run tbody not found for project:', projectId);
+                    return;
+                }
+
+                // Clear existing rows
+                tbody.innerHTML = '';
+
+                if (!cloudRunServices || !Array.isArray(cloudRunServices) || cloudRunServices.length === 0) {
+                    console.log('[DEBUG] No Cloud Run services to render');
+                    return;
+                }
+
+                console.log('[DEBUG] Rendering', cloudRunServices.length, 'Cloud Run services');
+
+                // Manually create table rows
+                for (var i = 0; i < cloudRunServices.length; i++) {
+                    var cr = cloudRunServices[i];
+                    var tr = document.createElement('tr');
+
+                    // Service Name
+                    var td1 = document.createElement('td');
+                    td1.textContent = cr.name || 'N/A';
+                    tr.appendChild(td1);
+
+                    // URL
+                    var td2 = document.createElement('td');
+                    var a = document.createElement('a');
+                    a.href = cr.attributes.url || '#';
+                    a.textContent = cr.attributes.url || 'N/A';
+                    a.target = '_blank';
+                    td2.appendChild(a);
+                    tr.appendChild(td2);
+
+                    // Image
+                    var td3 = document.createElement('td');
+                    var code1 = document.createElement('code');
+                    code1.textContent = cr.attributes.image || 'N/A';
+                    td3.appendChild(code1);
+                    tr.appendChild(td3);
+
+                    // Region
+                    var td4 = document.createElement('td');
+                    td4.textContent = cr.region || 'N/A';
+                    tr.appendChild(td4);
+
+                    // VPC
+                    var td5 = document.createElement('td');
+                    var code2 = document.createElement('code');
+                    var vpc = cr.attributes.vpc || 'N/A';
+                    var vpcParts = vpc.split('/');
+                    code2.textContent = vpcParts[vpcParts.length - 1];
+                    td5.appendChild(code2);
+                    tr.appendChild(td5);
+
+                    // Subnet
+                    var td6 = document.createElement('td');
+                    var code3 = document.createElement('code');
+                    var subnet = cr.attributes.subnet || 'N/A';
+                    var subnetParts = subnet.split('/');
+                    code3.textContent = subnetParts[subnetParts.length - 1];
+                    td6.appendChild(code3);
+                    tr.appendChild(td6);
+
+                    tbody.appendChild(tr);
+                }
+
+                console.log('[DEBUG] Rendered', tbody.children.length, 'rows to Cloud Run table');
             }
         }
     }
