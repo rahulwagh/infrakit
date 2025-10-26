@@ -74,3 +74,55 @@ func LoadResources() ([]fetcher.StandardizedResource, error) {
 
 	return resources, nil
 }
+
+// MergeResourcesForProject intelligently merges new resources for a specific project
+// into the existing cache. It removes old resources from that project and adds the new ones,
+// while preserving resources from all other projects.
+func MergeResourcesForProject(newResources []fetcher.StandardizedResource, projectID string) error {
+	// Load existing cache
+	existingResources, err := LoadResources()
+	if err != nil {
+		// If cache doesn't exist yet, just save the new resources
+		if os.IsNotExist(err) {
+			return SaveResources(newResources)
+		}
+		return fmt.Errorf("failed to load existing cache: %w", err)
+	}
+
+	// Filter out resources belonging to the specified project
+	var filteredResources []fetcher.StandardizedResource
+	for _, resource := range existingResources {
+		// Keep the resource if it doesn't belong to the project being synced
+		if !belongsToProject(resource, projectID) {
+			filteredResources = append(filteredResources, resource)
+		}
+	}
+
+	// Add the newly fetched resources for the project
+	filteredResources = append(filteredResources, newResources...)
+
+	// Save the merged cache
+	return SaveResources(filteredResources)
+}
+
+// belongsToProject checks if a resource belongs to a specific GCP project
+func belongsToProject(resource fetcher.StandardizedResource, projectID string) bool {
+	// For GCP resources only
+	if resource.Provider != "gcp" {
+		return false
+	}
+
+	// Check if the resource is the project itself
+	if resource.Service == "project" && resource.ID == projectID {
+		return true
+	}
+
+	// Check if the resource has project_id in attributes
+	if resource.Attributes != nil {
+		if projID, exists := resource.Attributes["project_id"]; exists && projID == projectID {
+			return true
+		}
+	}
+
+	return false
+}

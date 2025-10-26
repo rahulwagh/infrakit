@@ -152,3 +152,77 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 	}
 	return allResources, nil
 }
+
+// FetchGCPSingleProject fetches all resources for a specific GCP project.
+// This is used for targeted syncing without affecting the entire cache.
+func FetchGCPSingleProject(projectID string) ([]StandardizedResource, error) {
+	ctx := context.Background()
+	var allResources []StandardizedResource
+
+	log.Printf("Fetching resources for GCP project: %s", projectID)
+
+	// Create a Resource Manager service to verify the project exists
+	crmService, err := cloudresourcemanager.NewService(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cloudresourcemanager service: %w", err)
+	}
+
+	// Verify the project exists and get its metadata
+	project, err := crmService.Projects.Get(projectID).Context(ctx).Do()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project %s: %w", projectID, err)
+	}
+
+	// Add the project itself as a resource
+	standardizedRes := StandardizedResource{
+		Provider: "gcp",
+		Service:  "project",
+		Region:   "global",
+		ID:       project.ProjectId,
+		Name:     project.Name,
+		Attributes: map[string]string{
+			"state":          project.LifecycleState,
+			"project_number": fmt.Sprintf("%d", project.ProjectNumber),
+		},
+	}
+	allResources = append(allResources, standardizedRes)
+
+	// Fetch network resources
+	log.Printf("Fetching network resources for project %s...", projectID)
+	networkRes, err := FetchGCPNetworkResourcesForProject(projectID)
+	if err != nil {
+		log.Printf("Warning: could not fetch network resources for project %s: %v", projectID, err)
+	} else {
+		allResources = append(allResources, networkRes...)
+	}
+
+	// Fetch Cloud Run services
+	log.Printf("Fetching Cloud Run services for project %s...", projectID)
+	cloudRunRes, err := FetchGCPCloudRunServices(projectID)
+	if err != nil {
+		log.Printf("Warning: could not fetch Cloud Run services for project %s: %v", projectID, err)
+	} else {
+		allResources = append(allResources, cloudRunRes...)
+	}
+
+	// Fetch app infrastructure resources
+	log.Printf("Fetching app infrastructure for project %s...", projectID)
+	appInfraRes, err := FetchGCPAppInfraForProject(projectID)
+	if err != nil {
+		log.Printf("Warning: could not fetch app infrastructure for project %s: %v", projectID, err)
+	} else {
+		allResources = append(allResources, appInfraRes...)
+	}
+
+	// Fetch IAM service accounts
+	log.Printf("Fetching service accounts for project %s...", projectID)
+	iamRes, err := FetchGCPServiceAccounts(projectID)
+	if err != nil {
+		log.Printf("Warning: could not fetch service accounts for project %s: %v", projectID, err)
+	} else {
+		allResources = append(allResources, iamRes...)
+	}
+
+	log.Printf("Successfully fetched %d resources for project %s", len(allResources), projectID)
+	return allResources, nil
+}

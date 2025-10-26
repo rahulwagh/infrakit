@@ -10,20 +10,50 @@ import (
 )
 
 var syncCmd = &cobra.Command{
-	Use:   "sync",
+	Use:   "sync [provider] [project-id]",
 	Short: "Fetch resources from cloud providers and update the local cache.",
-	// cmd/sync.go
+	Long: `Sync resources from cloud providers. Examples:
+  infrakit sync              - Sync all providers (AWS, GCP)
+  infrakit sync aws          - Sync only AWS resources
+  infrakit sync gcp          - Sync all GCP projects
+  infrakit sync gcp my-proj  - Sync only the specified GCP project`,
 
     Run: func(cmd *cobra.Command, args []string) {
     	log.Println("Starting resource sync...")
 
-    	var allResources []fetcher.StandardizedResource
-
-    	// Check if a specific provider was passed as an argument.
+    	// Parse arguments
     	providerToSync := ""
+    	projectID := ""
     	if len(args) > 0 {
     		providerToSync = args[0]
     	}
+    	if len(args) > 1 {
+    		projectID = args[1]
+    	}
+
+    	// --- Handle GCP project-specific sync ---
+    	if providerToSync == "gcp" && projectID != "" {
+    		log.Printf("--- Syncing specific GCP project: %s ---", projectID)
+
+    		// Fetch resources for the specific project
+    		gcpResources, err := fetcher.FetchGCPSingleProject(projectID)
+    		if err != nil {
+    			log.Fatalf("Error fetching resources for project %s: %v", projectID, err)
+    		}
+
+    		log.Printf("Found %d resources for project %s", len(gcpResources), projectID)
+
+    		// Merge with existing cache (intelligent merge)
+    		if err := cache.MergeResourcesForProject(gcpResources, projectID); err != nil {
+    			log.Fatalf("Error merging cache for project %s: %v", projectID, err)
+    		}
+
+    		log.Printf("Successfully synced project %s and merged with cache!\n", projectID)
+    		return
+    	}
+
+    	// --- Handle full provider sync (existing behavior) ---
+    	var allResources []fetcher.StandardizedResource
 
     	// --- Sync AWS Resources ---
     	// This block runs if no provider is specified (sync all) OR if the provider is "aws".
@@ -78,7 +108,7 @@ var syncCmd = &cobra.Command{
     		log.Fatalf("Error: Invalid provider '%s'. Valid providers are 'aws' or 'gcp', or no provider to sync all.", providerToSync)
     	}
 
-    	// --- Save combined results ---
+    	// --- Save combined results (full replacement for full provider sync) ---
     	if len(allResources) > 0 {
     		if err := cache.SaveResources(allResources); err != nil {
     			log.Fatalf("Error saving cache: %v", err)
