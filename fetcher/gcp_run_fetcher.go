@@ -54,14 +54,19 @@ func FetchGCPCloudRunServices(projectID string, networkResources []StandardizedR
 				// Check for network interfaces (direct VPC egress - newer method)
 				if networkInterfaces, ok := annotations["run.googleapis.com/network-interfaces"]; ok {
 					vpcName, subnetName := parseNetworkInterfaces(networkInterfaces, projectID)
+					log.Printf("[DEBUG] Parsed network interfaces for Cloud Run service - VPC: %s, Subnet: %s", vpcName, subnetName)
 					if vpcName != "" {
 						attributes["vpc"] = vpcName
 					}
 					if subnetName != "" {
 						attributes["subnet"] = subnetName
 						// Look up the subnet CIDR from network resources
+						log.Printf("[DEBUG] Looking up CIDR for subnet: %s among %d network resources", subnetName, len(networkResources))
 						if cidr := findSubnetCIDR(networkResources, subnetName); cidr != "" {
 							attributes["subnet_cidr"] = cidr
+							log.Printf("[DEBUG] Found and set CIDR: %s", cidr)
+						} else {
+							log.Printf("[DEBUG] CIDR not found for subnet: %s", subnetName)
 						}
 					}
 				}
@@ -124,12 +129,22 @@ func parseNetworkInterfaces(networkInterfacesJSON string, projectID string) (vpc
 
 // findSubnetCIDR looks up the CIDR range for a given subnet name from the network resources
 func findSubnetCIDR(networkResources []StandardizedResource, subnetName string) string {
+	if subnetName == "" {
+		return ""
+	}
+
 	for _, resource := range networkResources {
-		if resource.Service == "subnet" && resource.Name == subnetName {
-			if cidr, ok := resource.Attributes["cidr_range"]; ok {
-				return cidr
+		if resource.Service == "subnet" {
+			// Match against both Name and ID fields, and also check if the subnet name is contained in the resource
+			if resource.Name == subnetName || resource.ID == subnetName ||
+			   strings.Contains(resource.Name, subnetName) || strings.Contains(resource.ID, subnetName) {
+				if cidr, ok := resource.Attributes["cidr_range"]; ok {
+					log.Printf("[DEBUG] Found CIDR %s for subnet %s", cidr, subnetName)
+					return cidr
+				}
 			}
 		}
 	}
+	log.Printf("[DEBUG] No CIDR found for subnet %s among %d network resources", subnetName, len(networkResources))
 	return ""
 }
