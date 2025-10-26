@@ -36,16 +36,43 @@ Cloud APIs → Fetchers → StandardizedResource[] → Cache (JSON) → Search/S
 
 ## Common Development Commands
 
+### Quick Start with Makefile
+
+The project includes a Makefile for common tasks:
+
+```bash
+# Run all checks (format, test, build)
+make check
+
+# Build for current platform
+make build
+
+# Build binaries for all platforms
+make build-all
+
+# Run tests
+make test
+
+# Run tests with coverage
+make test-coverage
+
+# See all available targets
+make help
+```
+
 ### Building the Application
 
 ```bash
 # Build for current platform
 go build -o infrakit
+# or
+make build
 
-# Build for Linux (AMD64)
+# Build for all platforms
+make build-all
+
+# Build manually for specific platforms
 GOOS=linux GOARCH=amd64 go build -o dist/infrakit-linux-amd64
-
-# Build for macOS (ARM64)
 GOOS=darwin GOARCH=arm64 go build -o dist/infrakit-macos-arm64
 ```
 
@@ -58,8 +85,11 @@ go run main.go sync
 # Sync only AWS resources
 go run main.go sync aws
 
-# Sync only GCP resources
+# Sync all GCP resources
 go run main.go sync gcp
+
+# Sync a specific GCP project (intelligent merge with existing cache)
+go run main.go sync gcp my-project-id
 
 # Launch interactive search
 go run main.go search
@@ -135,10 +165,89 @@ import "github.com/rahulwagh/infrakit/fetcher"
 
 ## Testing Strategy
 
-Currently no test files exist. When adding tests:
-- Place test files alongside source files (e.g., `cache/cache_test.go`)
-- Run with `go test ./...`
-- Mock cloud API calls to avoid requiring actual credentials
+Infrakit has a comprehensive test suite to ensure code quality and prevent regressions when adding new features.
+
+### Test Structure
+
+Tests are organized alongside their source files:
+- `cache/cache_test.go` - Tests for cache operations (save, load, merge)
+- `fetcher/types_test.go` - Tests for resource type serialization and validation
+
+### Running Tests
+
+Use the Makefile for convenient test execution:
+
+```bash
+# Run all tests
+make test
+
+# Run tests with verbose output
+make test-verbose
+
+# Run tests with coverage report
+make test-coverage
+
+# Run tests for specific package
+make test-cache
+make test-fetcher
+
+# Run tests with race detection
+make test-race
+
+# Or use go test directly
+go test ./...
+go test -v ./cache/...
+go test -v -cover ./...
+```
+
+### Test Coverage
+
+Key areas covered by tests:
+- **Cache Operations**: Save, load, and merge operations with temporary test directories
+- **Resource Serialization**: JSON marshaling/unmarshaling of StandardizedResource
+- **Project Filtering**: belongsToProject() logic for intelligent cache merging
+- **Edge Cases**: Empty caches, nil attributes, missing files
+
+### Writing New Tests
+
+When adding new features:
+1. Create test file alongside source (e.g., `myfile_test.go` next to `myfile.go`)
+2. Use table-driven tests for multiple scenarios
+3. Mock cloud API calls to avoid requiring credentials
+4. Use temporary directories for file operations
+5. Clean up resources in defer statements
+
+Example test pattern:
+```go
+func TestNewFeature(t *testing.T) {
+    tests := []struct {
+        name     string
+        input    string
+        expected string
+    }{
+        {"case 1", "input1", "output1"},
+        {"case 2", "input2", "output2"},
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            result := NewFeature(tt.input)
+            if result != tt.expected {
+                t.Errorf("got %s, want %s", result, tt.expected)
+            }
+        })
+    }
+}
+```
+
+### CI/CD Integration
+
+Run the full CI suite before committing:
+```bash
+make ci
+```
+
+This runs formatting, tests with coverage, and builds all platform binaries.
 
 ## GCP Organization vs Project-based Discovery
 

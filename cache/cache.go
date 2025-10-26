@@ -3,6 +3,7 @@ package cache
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,7 +60,7 @@ func LoadResources() ([]fetcher.StandardizedResource, error) {
 
 	// Check if the cache file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("cache file not found. Please run 'sync' first")
+		return nil, os.ErrNotExist
 	}
 
 	data, err := os.ReadFile(filePath)
@@ -83,7 +84,7 @@ func MergeResourcesForProject(newResources []fetcher.StandardizedResource, proje
 	existingResources, err := LoadResources()
 	if err != nil {
 		// If cache doesn't exist yet, just save the new resources
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return SaveResources(newResources)
 		}
 		return fmt.Errorf("failed to load existing cache: %w", err)
