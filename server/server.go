@@ -105,10 +105,24 @@ func handleGetLBFlows(w http.ResponseWriter, r *http.Request) {
 	for _, res := range allResources {
 		if res.Service == "forwardingrule" && res.Attributes["project_id"] == projectID {
 			flow := fetcher.LoadBalancerFlow{
-				Name:      res.Name, ProjectID: projectID,
-				Frontend: fetcher.FrontendConfig{ IPAddress: res.Attributes["ip_address"], PortRange: res.Attributes["port_range"], Protocol: res.Attributes["protocol"] },
+				Name:      res.Name,
+				ProjectID: projectID,
+				Frontend: fetcher.FrontendConfig{
+					IPAddress:           res.Attributes["ip_address"],
+					PortRange:           res.Attributes["port_range"],
+					Protocol:            res.Attributes["protocol"],
+					LoadBalancingScheme: res.Attributes["load_balancing_scheme"],
+				},
 			}
 			if proxy, ok := targetProxies[res.Attributes["target"]]; ok {
+				// Populate SSL certificates from target proxy
+				if certStr, exists := proxy.Attributes["ssl_certificates"]; exists && certStr != "" {
+					flow.Frontend.Certificates = strings.Split(certStr, ",")
+				}
+				// Populate SSL policy from target proxy
+				if sslPolicy, exists := proxy.Attributes["ssl_policy"]; exists {
+					flow.Frontend.SSLPolicy = sslPolicy
+				}
 				if urlMap, ok2 := urlMaps[proxy.Attributes["url_map"]]; ok2 {
 					flow.RoutingRules = append(flow.RoutingRules, fetcher.RoutingRule{Hosts: []string{"all"}, PathMatcher: "default"}) // Simplified routing
 					if bs, ok3 := backendServices[urlMap.Attributes["default_service"]]; ok3 {

@@ -105,14 +105,45 @@ func FetchGCPAppInfraForProject(projectID string) ([]StandardizedResource, error
 	if targetProxies != nil {
 		for _, scope := range targetProxies.Items {
 			for _, proxy := range scope.TargetHttpsProxies {
-				appResources = append(appResources, StandardizedResource{Provider: "gcp", Service: "targethttpsproxy", ID: proxy.Name, Name: proxy.Name, Attributes: map[string]string{"project_id": projectID, "url_map": proxy.UrlMap}})
+				attributes := map[string]string{
+					"project_id": projectID,
+					"url_map":    proxy.UrlMap,
+				}
+				// Store SSL certificates as comma-separated list
+				if len(proxy.SslCertificates) > 0 {
+					attributes["ssl_certificates"] = strings.Join(proxy.SslCertificates, ",")
+				}
+				// Store SSL policy
+				if proxy.SslPolicy != "" {
+					attributes["ssl_policy"] = proxy.SslPolicy
+				}
+				appResources = append(appResources, StandardizedResource{
+					Provider:   "gcp",
+					Service:    "targethttpsproxy",
+					ID:         proxy.Name,
+					Name:       proxy.Name,
+					Attributes: attributes,
+				})
 			}
 		}
 	}
 	forwardingRules, _ := computeService.GlobalForwardingRules.List(projectID).Do()
 	if forwardingRules != nil {
 		for _, fr := range forwardingRules.Items {
-			appResources = append(appResources, StandardizedResource{Provider: "gcp", Service: "forwardingrule", ID: fr.Name, Name: fr.Name, Attributes: map[string]string{"project_id": projectID, "ip_address": fr.IPAddress, "port_range": fr.PortRange, "target": fr.Target}})
+			appResources = append(appResources, StandardizedResource{
+				Provider: "gcp",
+				Service:  "forwardingrule",
+				ID:       fr.Name,
+				Name:     fr.Name,
+				Attributes: map[string]string{
+					"project_id":            projectID,
+					"ip_address":            fr.IPAddress,
+					"port_range":            fr.PortRange,
+					"target":                fr.Target,
+					"protocol":              fr.IPProtocol,
+					"load_balancing_scheme": fr.LoadBalancingScheme,
+				},
+			})
 		}
 	}
 	return appResources, nil
