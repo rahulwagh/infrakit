@@ -3,8 +3,10 @@ package fetcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 
 	"google.golang.org/api/run/v1"
 )
@@ -36,11 +38,25 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 				"subnet":     "N/A",
 			}
 
+			// Extract network configuration from annotations
 			if service.Spec.Template.Metadata != nil && service.Spec.Template.Metadata.Annotations != nil {
 				annotations := service.Spec.Template.Metadata.Annotations
+
+				// Check for VPC Access Connector (older/simpler method)
 				if connectorName, ok := annotations["run.googleapis.com/vpc-access-connector"]; ok {
 					attributes["vpc"] = "via-connector"
-					attributes["subnet"] = connectorName
+					attributes["subnet"] = extractResourceName(connectorName)
+				}
+
+				// Check for network interfaces (direct VPC egress - newer method)
+				if networkInterfaces, ok := annotations["run.googleapis.com/network-interfaces"]; ok {
+					vpcName, subnetName := parseNetworkInterfaces(networkInterfaces, projectID)
+					if vpcName != "" {
+						attributes["vpc"] = vpcName
+					}
+					if subnetName != "" {
+						attributes["subnet"] = subnetName
+					}
 				}
 			}
 
@@ -55,4 +71,46 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 		}
 	}
 	return cloudRunResources, nil
+}
+
+// extractResourceName extracts the resource name from a full GCP resource path
+// Example: "projects/my-project/locations/us-central1/connectors/my-connector" -> "my-connector"
+func extractResourceName(resourcePath string) string {
+	if resourcePath == "" {
+		return "N/A"
+	}
+	parts := strings.Split(resourcePath, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return resourcePath
+}
+
+// parseNetworkInterfaces parses the network-interfaces annotation JSON
+// Format: [{"network":"vpc-name","subnetwork":"subnet-name"}]
+func parseNetworkInterfaces(networkInterfacesJSON string, projectID string) (vpcName, subnetName string) {
+	var interfaces []map[string]interface{}
+	if err := json.Unmarshal([]byte(networkInterfacesJSON), &interfaces); err != nil {
+		log.Printf("Warning: could not parse network-interfaces annotation: %v", err)
+		return "", ""
+	}
+
+	if len(interfaces) == 0 {
+		return "", ""
+	}
+
+	// Take the first interface
+	iface := interfaces[0]
+
+	// Extract VPC name
+	if network, ok := iface["network"].(string); ok && network != "" {
+		vpcName = extractResourceName(network)
+	}
+
+	// Extract subnet name
+	if subnetwork, ok := iface["subnetwork"].(string); ok && subnetwork != "" {
+		subnetName = extractResourceName(subnetwork)
+	}
+
+	return vpcName, subnetName
 }

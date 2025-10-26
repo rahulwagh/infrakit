@@ -341,8 +341,7 @@
                     var td5 = document.createElement('td');
                     var code2 = document.createElement('code');
                     var vpc = cr.attributes.vpc || 'N/A';
-                    var vpcParts = vpc.split('/');
-                    code2.textContent = vpcParts[vpcParts.length - 1];
+                    code2.textContent = vpc;
                     td5.appendChild(code2);
                     tr.appendChild(td5);
 
@@ -350,8 +349,7 @@
                     var td6 = document.createElement('td');
                     var code3 = document.createElement('code');
                     var subnet = cr.attributes.subnet || 'N/A';
-                    var subnetParts = subnet.split('/');
-                    code3.textContent = subnetParts[subnetParts.length - 1];
+                    code3.textContent = subnet;
                     td6.appendChild(code3);
                     tr.appendChild(td6);
 
