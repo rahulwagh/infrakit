@@ -121,3 +121,75 @@ func TestParseNetworkInterfaces(t *testing.T) {
 		})
 	}
 }
+
+func TestFindSubnetCIDR(t *testing.T) {
+	networkResources := []StandardizedResource{
+		{
+			Provider: "gcp",
+			Service:  "vpc",
+			ID:       "my-vpc",
+			Name:     "my-vpc",
+			Attributes: map[string]string{
+				"project_id": "test-project",
+			},
+		},
+		{
+			Provider: "gcp",
+			Service:  "subnet",
+			ID:       "my-subnet",
+			Name:     "my-subnet",
+			Attributes: map[string]string{
+				"project_id": "test-project",
+				"vpc":        "my-vpc",
+				"cidr_range": "10.0.1.0/24",
+			},
+		},
+		{
+			Provider: "gcp",
+			Service:  "subnet",
+			ID:       "another-subnet",
+			Name:     "another-subnet",
+			Attributes: map[string]string{
+				"project_id": "test-project",
+				"vpc":        "my-vpc",
+				"cidr_range": "10.0.2.0/24",
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		subnetName   string
+		expectedCIDR string
+	}{
+		{
+			name:         "Found subnet with CIDR",
+			subnetName:   "my-subnet",
+			expectedCIDR: "10.0.1.0/24",
+		},
+		{
+			name:         "Found another subnet",
+			subnetName:   "another-subnet",
+			expectedCIDR: "10.0.2.0/24",
+		},
+		{
+			name:         "Subnet not found",
+			subnetName:   "non-existent-subnet",
+			expectedCIDR: "",
+		},
+		{
+			name:         "Empty subnet name",
+			subnetName:   "",
+			expectedCIDR: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cidr := findSubnetCIDR(networkResources, tt.subnetName)
+			if cidr != tt.expectedCIDR {
+				t.Errorf("findSubnetCIDR(%q) = %q, expected %q", tt.subnetName, cidr, tt.expectedCIDR)
+			}
+		})
+	}
+}

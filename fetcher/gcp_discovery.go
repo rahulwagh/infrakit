@@ -84,7 +84,7 @@ func FetchGCPResourcesFromOrg(organizationID string) ([]StandardizedResource, er
 			if projectID != "" && projectID != "N/A" {
 				networkRes, _ := FetchGCPNetworkResourcesForProject(projectID)
 				allResources = append(allResources, networkRes...)
-				cloudRunRes, _ := FetchGCPCloudRunServices(projectID)
+				cloudRunRes, _ := FetchGCPCloudRunServices(projectID, networkRes)
 				allResources = append(allResources, cloudRunRes...)
 				appInfraRes, _ := FetchGCPAppInfraForProject(projectID)
 				allResources = append(allResources, appInfraRes...)
@@ -131,7 +131,7 @@ func FetchGCPProjectsNoOrg() ([]StandardizedResource, error) {
 
 			networkRes, _ := FetchGCPNetworkResourcesForProject(project.ProjectId)
 			allResources = append(allResources, networkRes...)
-			cloudRunRes, _ := FetchGCPCloudRunServices(project.ProjectId)
+			cloudRunRes, _ := FetchGCPCloudRunServices(project.ProjectId, networkRes)
 			allResources = append(allResources, cloudRunRes...)
 			appInfraRes, _ := FetchGCPAppInfraForProject(project.ProjectId)
 			allResources = append(allResources, appInfraRes...)
@@ -198,7 +198,7 @@ func FetchGCPSingleProject(projectID string) ([]StandardizedResource, error) {
 
 	// Fetch Cloud Run services
 	log.Printf("Fetching Cloud Run services for project %s...", projectID)
-	cloudRunRes, err := FetchGCPCloudRunServices(projectID)
+	cloudRunRes, err := FetchGCPCloudRunServices(projectID, networkRes)
 	if err != nil {
 		log.Printf("Warning: could not fetch Cloud Run services for project %s: %v", projectID, err)
 	} else {

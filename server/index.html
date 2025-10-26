@@ -349,7 +349,12 @@
                     var td6 = document.createElement('td');
                     var code3 = document.createElement('code');
                     var subnet = cr.attributes.subnet || 'N/A';
-                    code3.textContent = subnet;
+                    var subnetCidr = cr.attributes.subnet_cidr || '';
+                    if (subnetCidr) {
+                        code3.textContent = subnet + ' (' + subnetCidr + ')';
+                    } else {
+                        code3.textContent = subnet;
+                    }
                     td6.appendChild(code3);
                     tr.appendChild(td6);
 

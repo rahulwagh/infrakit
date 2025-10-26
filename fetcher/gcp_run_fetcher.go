@@ -12,7 +12,8 @@ import (
 )
 
 // FetchGCPCloudRunServices fetches all Cloud Run services for a given project using the v1 API.
-func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) {
+// It also enriches the data with subnet CIDR information from the provided network resources.
+func FetchGCPCloudRunServices(projectID string, networkResources []StandardizedResource) ([]StandardizedResource, error) {
 	ctx := context.Background()
 	var cloudRunResources []StandardizedResource
 	runService, err := run.NewService(ctx)
@@ -31,11 +32,12 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 	for _, service := range resp.Items {
 		if service.Spec != nil && service.Spec.Template != nil && service.Spec.Template.Spec != nil && len(service.Spec.Template.Spec.Containers) > 0 {
 			attributes := map[string]string{
-				"project_id": projectID,
-				"url":        service.Status.Url,
-				"image":      service.Spec.Template.Spec.Containers[0].Image,
-				"vpc":        "N/A",
-				"subnet":     "N/A",
+				"project_id":  projectID,
+				"url":         service.Status.Url,
+				"image":       service.Spec.Template.Spec.Containers[0].Image,
+				"vpc":         "N/A",
+				"subnet":      "N/A",
+				"subnet_cidr": "",
 			}
 
 			// Extract network configuration from annotations
@@ -46,6 +48,7 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 				if connectorName, ok := annotations["run.googleapis.com/vpc-access-connector"]; ok {
 					attributes["vpc"] = "via-connector"
 					attributes["subnet"] = extractResourceName(connectorName)
+					// VPC connectors don't have a direct CIDR, they use a subnet internally
 				}
 
 				// Check for network interfaces (direct VPC egress - newer method)
@@ -56,6 +59,10 @@ func FetchGCPCloudRunServices(projectID string) ([]StandardizedResource, error) 
 					}
 					if subnetName != "" {
 						attributes["subnet"] = subnetName
+						// Look up the subnet CIDR from network resources
+						if cidr := findSubnetCIDR(networkResources, subnetName); cidr != "" {
+							attributes["subnet_cidr"] = cidr
+						}
 					}
 				}
 			}
@@ -113,4 +120,16 @@ func parseNetworkInterfaces(networkInterfacesJSON string, projectID string) (vpc
 	}
 
 	return vpcName, subnetName
+}
+
+// findSubnetCIDR looks up the CIDR range for a given subnet name from the network resources
+func findSubnetCIDR(networkResources []StandardizedResource, subnetName string) string {
+	for _, resource := range networkResources {
+		if resource.Service == "subnet" && resource.Name == subnetName {
+			if cidr, ok := resource.Attributes["cidr_range"]; ok {
+				return cidr
+			}
+		}
+	}
+	return ""
 }
