@@ -23,11 +23,12 @@ type LoadBalancerFlow struct {
 
 // FrontendConfig holds details about the user-facing side of the LB.
 type FrontendConfig struct {
-	IPAddress    string   `json:"ipAddress"`
-	PortRange    string   `json:"portRange"`
-	Protocol     string   `json:"protocol"`
-	Certificates []string `json:"certificates"`
-	SSLPolicy    string   `json:"sslPolicy"`
+	IPAddress           string   `json:"ipAddress"`
+	PortRange           string   `json:"portRange"`
+	Protocol            string   `json:"protocol"`
+	Certificates        []string `json:"certificates"`
+	SSLPolicy           string   `json:"sslPolicy"`
+	LoadBalancingScheme string   `json:"loadBalancingScheme"`
 }
 
 // RoutingRule holds details from the URL Map.

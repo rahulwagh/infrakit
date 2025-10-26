@@ -133,7 +133,16 @@ func FetchGCPLoadBalancerFlows(projectID string) ([]LoadBalancerFlow, error) {
 		return nil, fmt.Errorf("could not list forwarding rules: %w", err)
 	}
 	for _, fr := range forwardingRules.Items {
-		flow := LoadBalancerFlow{Name: fr.Name, ProjectID: projectID, Frontend: FrontendConfig{IPAddress: fr.IPAddress, PortRange: fr.PortRange, Protocol: fr.IPProtocol}}
+		flow := LoadBalancerFlow{
+			Name:      fr.Name,
+			ProjectID: projectID,
+			Frontend: FrontendConfig{
+				IPAddress:           fr.IPAddress,
+				PortRange:           fr.PortRange,
+				Protocol:            fr.IPProtocol,
+				LoadBalancingScheme: fr.LoadBalancingScheme,
+			},
+		}
 		proxyName := strings.Split(fr.Target, "/")[len(strings.Split(fr.Target, "/"))-1]
 		httpsProxy, err := computeService.TargetHttpsProxies.Get(projectID, proxyName).Do()
 		if err == nil {

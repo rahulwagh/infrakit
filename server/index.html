@@ -146,8 +146,21 @@
                                     <div class="flow-container">
                                         <div class="flow-card">
                                             <h5>Frontend: <span x-text="flow.frontend.ipAddress || 'Not Found'"></span></h5>
-                                            <p><strong>Port:</strong> <code x-text="flow.frontend.portRange"></code></p>
+                                            <p><strong>IP:Port:</strong> <code><span x-text="flow.frontend.ipAddress"></span>:<span x-text="flow.frontend.portRange"></span></code></p>
                                             <p><strong>Protocol:</strong> <code x-text="flow.frontend.protocol"></code></p>
+                                            <template x-if="flow.frontend.certificates && flow.frontend.certificates.length > 0">
+                                                <p><strong>Certificates:</strong>
+                                                    <template x-for="(cert, index) in flow.frontend.certificates" :key="cert">
+                                                        <code style="display: block; margin-top: 0.2rem;" x-text="cert.split('/').pop()"></code>
+                                                    </template>
+                                                </p>
+                                            </template>
+                                            <template x-if="flow.frontend.sslPolicy">
+                                                <p><strong>SSL Policy:</strong> <code x-text="flow.frontend.sslPolicy.split('/').pop()"></code></p>
+                                            </template>
+                                            <template x-if="flow.frontend.loadBalancingScheme">
+                                                <p><strong>Scheme:</strong> <code x-text="flow.frontend.loadBalancingScheme"></code></p>
+                                            </template>
                                         </div>
                                         <div class="flow-arrow">&rarr;</div>
                                         <div class="flow-card">
